@@ -14,10 +14,20 @@ type Config struct {
 	Mappings []Mapping `toml:"mapping"`
 }
 
+// Protocol specifies the output protocol
+type Protocol string
+
+const (
+	ProtocolArtNet Protocol = "artnet"
+	ProtocolSACN   Protocol = "sacn"
+)
+
 // Mapping represents a single channel mapping rule
 type Mapping struct {
-	From FromAddr `toml:"from"`
-	To   ToAddr   `toml:"to"`
+	From      FromAddr `toml:"from"`
+	FromProto Protocol `toml:"from_proto"`
+	To        ToAddr   `toml:"to"`
+	Protocol  Protocol `toml:"proto"`
 }
 
 // FromAddr represents a source universe address with channel range
@@ -201,7 +211,8 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
-	for i, m := range cfg.Mappings {
+	for i := range cfg.Mappings {
+		m := &cfg.Mappings[i]
 		if m.From.ChannelStart < 1 || m.From.ChannelStart > 512 {
 			return nil, fmt.Errorf("mapping %d: from channel start must be 1-512", i)
 		}
@@ -218,6 +229,16 @@ func Load(path string) (*Config, error) {
 		if toEnd > 512 {
 			return nil, fmt.Errorf("mapping %d: to channels exceed 512", i)
 		}
+		if m.FromProto == "" {
+			m.FromProto = ProtocolArtNet
+		} else if m.FromProto != ProtocolArtNet && m.FromProto != ProtocolSACN {
+			return nil, fmt.Errorf("mapping %d: from_proto must be 'artnet' or 'sacn'", i)
+		}
+		if m.Protocol == "" {
+			m.Protocol = ProtocolArtNet
+		} else if m.Protocol != ProtocolArtNet && m.Protocol != ProtocolSACN {
+			return nil, fmt.Errorf("mapping %d: proto must be 'artnet' or 'sacn'", i)
+		}
 	}
 
 	return &cfg, nil
@@ -227,9 +248,11 @@ func Load(path string) (*Config, error) {
 type NormalizedMapping struct {
 	FromUniverse artnet.Universe
 	FromChannel  int // 0-indexed
+	FromProto    Protocol
 	ToUniverse   artnet.Universe
 	ToChannel    int // 0-indexed
 	Count        int
+	Protocol     Protocol
 }
 
 // Normalize converts config mappings to normalized form (0-indexed channels)
@@ -239,10 +262,27 @@ func (c *Config) Normalize() []NormalizedMapping {
 		result[i] = NormalizedMapping{
 			FromUniverse: m.From.Universe,
 			FromChannel:  m.From.ChannelStart - 1,
+			FromProto:    m.FromProto,
 			ToUniverse:   m.To.Universe,
 			ToChannel:    m.To.ChannelStart - 1,
 			Count:        m.From.Count(),
+			Protocol:     m.Protocol,
 		}
+	}
+	return result
+}
+
+// SACNSourceUniverses returns universes that need sACN input
+func (c *Config) SACNSourceUniverses() []uint16 {
+	seen := make(map[uint16]bool)
+	for _, m := range c.Mappings {
+		if m.FromProto == ProtocolSACN {
+			seen[uint16(m.From.Universe)] = true
+		}
+	}
+	result := make([]uint16, 0, len(seen))
+	for u := range seen {
+		result = append(result, u)
 	}
 	return result
 }

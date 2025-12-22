@@ -19,6 +19,14 @@
 # To examples:
 #   "0.0.1"        - universe 1, starting at channel 1
 #   "0.0.1:50"     - universe 1, starting at channel 50
+#
+# Input protocol (optional, default "artnet"):
+#   from_proto = "artnet"  - receive via ArtNet
+#   from_proto = "sacn"    - receive via sACN/E1.31 (multicast)
+#
+# Output protocol (optional, default "artnet"):
+#   proto = "artnet"  - output via ArtNet (broadcast or discovered nodes)
+#   proto = "sacn"    - output via sACN/E1.31 (multicast)
 
 # Remap entire universe
 [[mapping]]
@@ -44,3 +52,15 @@ to = "0.0.7"
 [[mapping]]
 from = "0.0.3"
 to = "0.0.8"
+
+# Output to sACN instead of ArtNet
+[[mapping]]
+from = "0.0.4"
+to = 1
+proto = "sacn"
+
+# Convert sACN input to ArtNet output
+[[mapping]]
+from = 5
+from_proto = "sacn"
+to = "0.0.5"

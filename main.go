@@ -14,15 +14,18 @@ import (
 	"github.com/gopatchy/artmap/artnet"
 	"github.com/gopatchy/artmap/config"
 	"github.com/gopatchy/artmap/remap"
+	"github.com/gopatchy/artmap/sacn"
 )
 
 type App struct {
-	cfg       *config.Config
-	receiver  *artnet.Receiver
-	sender    *artnet.Sender
-	discovery *artnet.Discovery
-	engine    *remap.Engine
-	debug     bool
+	cfg          *config.Config
+	artReceiver  *artnet.Receiver
+	sacnReceiver *sacn.Receiver
+	artSender    *artnet.Sender
+	sacnSender   *sacn.Sender
+	discovery    *artnet.Discovery
+	engine       *remap.Engine
+	debug        bool
 }
 
 func main() {
@@ -52,43 +55,63 @@ func main() {
 	// Log mappings
 	for _, m := range cfg.Mappings {
 		toEnd := m.To.ChannelStart + m.From.Count() - 1
-		log.Printf("  %s:%d-%d -> %s:%d-%d",
-			m.From.Universe, m.From.ChannelStart, m.From.ChannelEnd,
-			m.To.Universe, m.To.ChannelStart, toEnd)
+		log.Printf("  [%s] %s:%d-%d -> [%s] %s:%d-%d",
+			m.FromProto, m.From.Universe, m.From.ChannelStart, m.From.ChannelEnd,
+			m.Protocol, m.To.Universe, m.To.ChannelStart, toEnd)
 	}
 
-	// Create sender
-	sender, err := artnet.NewSender(*broadcastAddr)
+	// Create ArtNet sender
+	artSender, err := artnet.NewSender(*broadcastAddr)
 	if err != nil {
-		log.Fatalf("failed to create sender: %v", err)
+		log.Fatalf("failed to create artnet sender: %v", err)
 	}
-	defer sender.Close()
+	defer artSender.Close()
+
+	// Create sACN sender
+	sacnSender, err := sacn.NewSender("artmap")
+	if err != nil {
+		log.Fatalf("failed to create sacn sender: %v", err)
+	}
+	defer sacnSender.Close()
 
 	// Create discovery
 	destUniverses := engine.DestUniverses()
-	discovery := artnet.NewDiscovery(sender, "artmap", "ArtNet Remapping Proxy", destUniverses)
+	discovery := artnet.NewDiscovery(artSender, "artmap", "ArtNet Remapping Proxy", destUniverses)
 
 	// Create app
 	app := &App{
-		cfg:       cfg,
-		sender:    sender,
-		discovery: discovery,
-		engine:    engine,
-		debug:     *debug,
+		cfg:        cfg,
+		artSender:  artSender,
+		sacnSender: sacnSender,
+		discovery:  discovery,
+		engine:     engine,
+		debug:      *debug,
 	}
 
-	// Create receiver
-	receiver, err := artnet.NewReceiver(addr, app)
+	// Create ArtNet receiver
+	artReceiver, err := artnet.NewReceiver(addr, app)
 	if err != nil {
-		log.Fatalf("failed to create receiver: %v", err)
+		log.Fatalf("failed to create artnet receiver: %v", err)
 	}
-	app.receiver = receiver
+	app.artReceiver = artReceiver
+
+	// Create sACN receiver if needed
+	sacnUniverses := cfg.SACNSourceUniverses()
+	if len(sacnUniverses) > 0 {
+		sacnReceiver, err := sacn.NewReceiver(sacnUniverses, app.HandleSACN)
+		if err != nil {
+			log.Fatalf("failed to create sacn receiver: %v", err)
+		}
+		app.sacnReceiver = sacnReceiver
+		sacnReceiver.Start()
+		log.Printf("listening for sACN on universes %v", sacnUniverses)
+	}
 
 	// Start everything
-	receiver.Start()
+	artReceiver.Start()
 	discovery.Start()
 
-	log.Printf("listening on %s", addr)
+	log.Printf("listening for ArtNet on %s", addr)
 	log.Printf("broadcasting to %s", *broadcastAddr)
 
 	// Wait for interrupt
@@ -97,46 +120,57 @@ func main() {
 	<-sigChan
 
 	log.Println("shutting down...")
-	receiver.Stop()
+	artReceiver.Stop()
+	if app.sacnReceiver != nil {
+		app.sacnReceiver.Stop()
+	}
 	discovery.Stop()
 }
 
 // HandleDMX implements artnet.PacketHandler
 func (a *App) HandleDMX(src *net.UDPAddr, pkt *artnet.DMXPacket) {
 	if a.debug {
-		log.Printf("recv DMX from %s: universe=%s seq=%d len=%d",
+		log.Printf("recv ArtNet from %s: universe=%s seq=%d len=%d",
 			src.IP, pkt.Universe, pkt.Sequence, pkt.Length)
 	}
 
 	// Apply remapping
-	outputs := a.engine.Remap(pkt.Universe, pkt.Data)
+	outputs := a.engine.Remap(config.ProtocolArtNet, pkt.Universe, pkt.Data)
 
 	// Send remapped outputs
 	for _, out := range outputs {
-		// Find nodes for this universe
-		nodes := a.discovery.GetNodesForUniverse(out.Universe)
-
-		if len(nodes) > 0 {
-			// Send to discovered nodes
-			for _, node := range nodes {
-				addr := &net.UDPAddr{
-					IP:   node.IP,
-					Port: int(node.Port),
-				}
-				if a.debug {
-					log.Printf("send DMX to %s: universe=%s", node.IP, out.Universe)
-				}
-				if err := a.sender.SendDMX(addr, out.Universe, out.Data[:]); err != nil {
-					log.Printf("failed to send to %s: %v", node.IP, err)
-				}
-			}
-		} else {
-			// Broadcast if no nodes discovered
+		switch out.Protocol {
+		case config.ProtocolSACN:
 			if a.debug {
-				log.Printf("send DMX broadcast: universe=%s", out.Universe)
+				log.Printf("send sACN multicast: universe=%d", uint16(out.Universe))
 			}
-			if err := a.sender.SendDMXBroadcast(out.Universe, out.Data[:]); err != nil {
-				log.Printf("failed to broadcast: %v", err)
+			if err := a.sacnSender.SendDMX(uint16(out.Universe), out.Data[:]); err != nil {
+				log.Printf("failed to send sACN: %v", err)
+			}
+
+		default: // ArtNet
+			nodes := a.discovery.GetNodesForUniverse(out.Universe)
+
+			if len(nodes) > 0 {
+				for _, node := range nodes {
+					addr := &net.UDPAddr{
+						IP:   node.IP,
+						Port: int(node.Port),
+					}
+					if a.debug {
+						log.Printf("send ArtNet to %s: universe=%s", node.IP, out.Universe)
+					}
+					if err := a.artSender.SendDMX(addr, out.Universe, out.Data[:]); err != nil {
+						log.Printf("failed to send to %s: %v", node.IP, err)
+					}
+				}
+			} else {
+				if a.debug {
+					log.Printf("send ArtNet broadcast: universe=%s", out.Universe)
+				}
+				if err := a.artSender.SendDMXBroadcast(out.Universe, out.Data[:]); err != nil {
+					log.Printf("failed to broadcast: %v", err)
+				}
 			}
 		}
 	}
@@ -156,6 +190,54 @@ func (a *App) HandlePollReply(src *net.UDPAddr, pkt *artnet.PollReplyPacket) {
 		log.Printf("recv PollReply from %s", src.IP)
 	}
 	a.discovery.HandlePollReply(src, pkt)
+}
+
+// HandleSACN handles incoming sACN DMX data
+func (a *App) HandleSACN(universe uint16, data [512]byte) {
+	if a.debug {
+		log.Printf("recv sACN: universe=%d", universe)
+	}
+
+	// Apply remapping
+	outputs := a.engine.Remap(config.ProtocolSACN, artnet.Universe(universe), data)
+
+	// Send remapped outputs
+	for _, out := range outputs {
+		switch out.Protocol {
+		case config.ProtocolSACN:
+			if a.debug {
+				log.Printf("send sACN multicast: universe=%d", uint16(out.Universe))
+			}
+			if err := a.sacnSender.SendDMX(uint16(out.Universe), out.Data[:]); err != nil {
+				log.Printf("failed to send sACN: %v", err)
+			}
+
+		default: // ArtNet
+			nodes := a.discovery.GetNodesForUniverse(out.Universe)
+
+			if len(nodes) > 0 {
+				for _, node := range nodes {
+					addr := &net.UDPAddr{
+						IP:   node.IP,
+						Port: int(node.Port),
+					}
+					if a.debug {
+						log.Printf("send ArtNet to %s: universe=%s", node.IP, out.Universe)
+					}
+					if err := a.artSender.SendDMX(addr, out.Universe, out.Data[:]); err != nil {
+						log.Printf("failed to send to %s: %v", node.IP, err)
+					}
+				}
+			} else {
+				if a.debug {
+					log.Printf("send ArtNet broadcast: universe=%s", out.Universe)
+				}
+				if err := a.artSender.SendDMXBroadcast(out.Universe, out.Data[:]); err != nil {
+					log.Printf("failed to broadcast: %v", err)
+				}
+			}
+		}
+	}
 }
 
 func init() {
