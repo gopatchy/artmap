@@ -20,12 +20,14 @@ type App struct {
 	sender    *artnet.Sender
 	discovery *artnet.Discovery
 	engine    *remap.Engine
+	debug     bool
 }
 
 func main() {
 	configPath := flag.String("config", "config.toml", "path to config file")
 	listenPort := flag.Int("port", artnet.Port, "ArtNet listen port")
 	broadcastAddr := flag.String("broadcast", "2.255.255.255", "ArtNet broadcast address")
+	debug := flag.Bool("debug", false, "log ArtNet packets")
 	flag.Parse()
 
 	// Load config
@@ -64,6 +66,7 @@ func main() {
 		sender:    sender,
 		discovery: discovery,
 		engine:    engine,
+		debug:     *debug,
 	}
 
 	// Create receiver
@@ -92,6 +95,11 @@ func main() {
 
 // HandleDMX implements artnet.PacketHandler
 func (a *App) HandleDMX(src *net.UDPAddr, pkt *artnet.DMXPacket) {
+	if a.debug {
+		log.Printf("recv DMX from %s: universe=%s seq=%d len=%d",
+			src.IP, pkt.Universe, pkt.Sequence, pkt.Length)
+	}
+
 	// Apply remapping
 	outputs := a.engine.Remap(pkt.Universe, pkt.Data)
 
@@ -107,12 +115,18 @@ func (a *App) HandleDMX(src *net.UDPAddr, pkt *artnet.DMXPacket) {
 					IP:   node.IP,
 					Port: int(node.Port),
 				}
+				if a.debug {
+					log.Printf("send DMX to %s: universe=%s", node.IP, out.Universe)
+				}
 				if err := a.sender.SendDMX(addr, out.Universe, out.Data[:]); err != nil {
 					log.Printf("failed to send to %s: %v", node.IP, err)
 				}
 			}
 		} else {
 			// Broadcast if no nodes discovered
+			if a.debug {
+				log.Printf("send DMX broadcast: universe=%s", out.Universe)
+			}
 			if err := a.sender.SendDMXBroadcast(out.Universe, out.Data[:]); err != nil {
 				log.Printf("failed to broadcast: %v", err)
 			}
@@ -122,11 +136,17 @@ func (a *App) HandleDMX(src *net.UDPAddr, pkt *artnet.DMXPacket) {
 
 // HandlePoll implements artnet.PacketHandler
 func (a *App) HandlePoll(src *net.UDPAddr, pkt *artnet.PollPacket) {
+	if a.debug {
+		log.Printf("recv Poll from %s", src.IP)
+	}
 	a.discovery.HandlePoll(src)
 }
 
 // HandlePollReply implements artnet.PacketHandler
 func (a *App) HandlePollReply(src *net.UDPAddr, pkt *artnet.PollReplyPacket) {
+	if a.debug {
+		log.Printf("recv PollReply from %s", src.IP)
+	}
 	a.discovery.HandlePollReply(src, pkt)
 }
 
