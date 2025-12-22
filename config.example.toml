@@ -5,15 +5,20 @@
 #   from: universe[:channels]  - range specifies which channels to read
 #   to:   universe[:channel]   - single channel specifies where to start writing
 #
+# Universe: "net.subnet.universe" or plain number (all 0-indexed, 0-127.0-15.0-15)
+# Channels: 1-indexed (1-512), matching DMX convention
+#
 # From examples:
-#   "0.0.1"        - all channels (1-512)
-#   "0.0.1:50"     - channel 50 only
-#   "0.0.1:50-"    - channels 50-512
-#   "0.0.1:50-100" - channels 50-100
+#   "0.0.1"        - universe 1, all channels (1-512)
+#   "0.0.1:50"     - universe 1, channel 50 only
+#   "0.0.1:50-"    - universe 1, channels 50-512
+#   "0.0.1:50-100" - universe 1, channels 50-100
+#   1              - universe 1, all channels
+#   "1:50-100"     - universe 1, channels 50-100
 #
 # To examples:
-#   "0.0.1"        - starting at channel 1
-#   "0.0.1:50"     - starting at channel 50
+#   "0.0.1"        - universe 1, starting at channel 1
+#   "0.0.1:50"     - universe 1, starting at channel 50
 
 # Remap entire universe
 [[mapping]]
