@@ -1,33 +1,37 @@
 # artmap configuration
 # Run with: go run . -config config.toml [-port 6454] [-broadcast 2.255.255.255]
 
-# Universe address formats:
-#   "0.0.1"  - Net.Subnet.Universe
-#   1        - Universe number only (net=0, subnet=0)
+# Address format:
+#   from: universe[:channels]  - range specifies which channels to read
+#   to:   universe[:channel]   - single channel specifies where to start writing
+#
+# From examples:
+#   "0.0.1"        - all channels (1-512)
+#   "0.0.1:50"     - channel 50 only
+#   "0.0.1:50-"    - channels 50-512
+#   "0.0.1:50-100" - channels 50-100
+#
+# To examples:
+#   "0.0.1"        - starting at channel 1
+#   "0.0.1:50"     - starting at channel 50
 
-# Example: Remap entire universe
-# Maps all 512 channels from universe 0 to universe 5
+# Remap entire universe
 [[mapping]]
 from = "0.0.0"
 to = "0.0.5"
 
-# Example: Channel-level remap for fixture spillover
-# Maps channels 450-512 from universe 0 to channels 1-63 of universe 1
-# Use case: A fixture at the end of universe 0 spills into universe 1
+# Channel-level remap for fixture spillover
+# Channels 450-512 from universe 0 -> channels 1-63 of universe 1
 [[mapping]]
-from = "0.0.0"
-from_channel = 450    # 1-512 (1-indexed, like DMX)
-to = "0.0.1"
-to_channel = 1
-count = 63            # Number of channels to remap
+from = "0.0.0:450-512"
+to = "0.0.1:1"
 
-# Example: Using plain universe numbers
+# Using plain universe numbers
 [[mapping]]
 from = 2
 to = 10
 
-# Example: Multiple outputs from same source
-# The same source channels can be mapped to multiple destinations
+# Multiple outputs from same source
 [[mapping]]
 from = "0.0.3"
 to = "0.0.7"

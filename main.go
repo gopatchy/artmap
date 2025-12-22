@@ -41,13 +41,10 @@ func main() {
 
 	// Log mappings
 	for _, m := range cfg.Mappings {
-		if m.Count == 512 && m.FromChannel == 1 {
-			log.Printf("  %s -> %s (all channels)", m.From.Universe, m.To.Universe)
-		} else {
-			log.Printf("  %s[%d-%d] -> %s[%d-%d]",
-				m.From.Universe, m.FromChannel, m.FromChannel+m.Count-1,
-				m.To.Universe, m.ToChannel, m.ToChannel+m.Count-1)
-		}
+		toEnd := m.To.ChannelStart + m.From.Count() - 1
+		log.Printf("  %s:%d-%d -> %s:%d-%d",
+			m.From.Universe, m.From.ChannelStart, m.From.ChannelEnd,
+			m.To.Universe, m.To.ChannelStart, toEnd)
 	}
 
 	// Create sender

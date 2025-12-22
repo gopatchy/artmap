@@ -16,66 +16,160 @@ type Config struct {
 
 // Mapping represents a single channel mapping rule
 type Mapping struct {
-	// Source
-	From        UniverseAddr `toml:"from"`
-	FromChannel int          `toml:"from_channel"` // 1-512, 0 means all channels
-
-	// Destination
-	To        UniverseAddr `toml:"to"`
-	ToChannel int          `toml:"to_channel"` // 1-512, 0 means same as from_channel
-
-	// Range
-	Count int `toml:"count"` // Number of channels, 0 means all remaining
+	From FromAddr `toml:"from"`
+	To   ToAddr   `toml:"to"`
 }
 
-// UniverseAddr handles multiple universe address formats
-type UniverseAddr struct {
-	Universe artnet.Universe
+// FromAddr represents a source universe address with channel range
+type FromAddr struct {
+	Universe     artnet.Universe
+	ChannelStart int // 1-indexed
+	ChannelEnd   int // 1-indexed
 }
 
-func (u *UniverseAddr) UnmarshalText(text []byte) error {
-	s := string(text)
-	universe, err := ParseUniverseAddr(s)
+func (a *FromAddr) UnmarshalTOML(data interface{}) error {
+	switch v := data.(type) {
+	case string:
+		return a.parse(v)
+	case int64:
+		a.Universe = artnet.Universe(v)
+		a.ChannelStart = 1
+		a.ChannelEnd = 512
+		return nil
+	case float64:
+		a.Universe = artnet.Universe(int64(v))
+		a.ChannelStart = 1
+		a.ChannelEnd = 512
+		return nil
+	default:
+		return fmt.Errorf("unsupported address type: %T", data)
+	}
+}
+
+// parse parses address formats:
+// - "0.0.1" - all channels
+// - "0.0.1:50" - single channel
+// - "0.0.1:50-" - channel 50 through end
+// - "0.0.1:50-100" - channel range
+func (a *FromAddr) parse(s string) error {
+	s = strings.TrimSpace(s)
+
+	universeStr, channelSpec := splitAddr(s)
+
+	universe, err := parseUniverse(universeStr)
 	if err != nil {
 		return err
 	}
-	u.Universe = universe
+	a.Universe = universe
+
+	if channelSpec == "" {
+		a.ChannelStart = 1
+		a.ChannelEnd = 512
+		return nil
+	}
+
+	if idx := strings.Index(channelSpec, "-"); idx != -1 {
+		startStr := channelSpec[:idx]
+		endStr := channelSpec[idx+1:]
+
+		start, err := strconv.Atoi(startStr)
+		if err != nil {
+			return fmt.Errorf("invalid channel start: %w", err)
+		}
+		a.ChannelStart = start
+
+		if endStr == "" {
+			a.ChannelEnd = 512
+		} else {
+			end, err := strconv.Atoi(endStr)
+			if err != nil {
+				return fmt.Errorf("invalid channel end: %w", err)
+			}
+			a.ChannelEnd = end
+		}
+	} else {
+		ch, err := strconv.Atoi(channelSpec)
+		if err != nil {
+			return fmt.Errorf("invalid channel: %w", err)
+		}
+		a.ChannelStart = ch
+		a.ChannelEnd = ch
+	}
+
 	return nil
 }
 
-func (u *UniverseAddr) UnmarshalTOML(data interface{}) error {
+func (a *FromAddr) Count() int {
+	return a.ChannelEnd - a.ChannelStart + 1
+}
+
+// ToAddr represents a destination universe address with starting channel
+type ToAddr struct {
+	Universe     artnet.Universe
+	ChannelStart int // 1-indexed
+}
+
+func (a *ToAddr) UnmarshalTOML(data interface{}) error {
 	switch v := data.(type) {
 	case string:
-		universe, err := ParseUniverseAddr(v)
-		if err != nil {
-			return err
-		}
-		u.Universe = universe
-		return nil
+		return a.parse(v)
 	case int64:
-		// Universe number only (0-32767)
-		u.Universe = artnet.Universe(v)
+		a.Universe = artnet.Universe(v)
+		a.ChannelStart = 1
 		return nil
 	case float64:
-		// TOML sometimes parses integers as floats
-		u.Universe = artnet.Universe(int64(v))
+		a.Universe = artnet.Universe(int64(v))
+		a.ChannelStart = 1
 		return nil
 	default:
-		return fmt.Errorf("unsupported universe address type: %T", data)
+		return fmt.Errorf("unsupported address type: %T", data)
 	}
 }
 
-// ParseUniverseAddr parses universe address formats:
-// - "0.0.1" - Net.Subnet.Universe
-// - "1" - Universe number only
-func ParseUniverseAddr(s string) (artnet.Universe, error) {
+// parse parses address formats:
+// - "0.0.1" - starting at channel 1
+// - "0.0.1:50" - starting at channel 50
+func (a *ToAddr) parse(s string) error {
 	s = strings.TrimSpace(s)
 
-	// Try Net.Subnet.Universe format
+	universeStr, channelSpec := splitAddr(s)
+
+	universe, err := parseUniverse(universeStr)
+	if err != nil {
+		return err
+	}
+	a.Universe = universe
+
+	if channelSpec == "" {
+		a.ChannelStart = 1
+		return nil
+	}
+
+	if strings.Contains(channelSpec, "-") {
+		return fmt.Errorf("to address cannot contain range; use single channel number")
+	}
+
+	ch, err := strconv.Atoi(channelSpec)
+	if err != nil {
+		return fmt.Errorf("invalid channel: %w", err)
+	}
+	a.ChannelStart = ch
+
+	return nil
+}
+
+func splitAddr(s string) (universe, channel string) {
+	if idx := strings.LastIndex(s, ":"); idx != -1 {
+		return s[:idx], s[idx+1:]
+	}
+	return s, ""
+}
+
+func parseUniverse(s string) (artnet.Universe, error) {
 	if strings.Contains(s, ".") {
 		parts := strings.Split(s, ".")
 		if len(parts) != 3 {
-			return 0, fmt.Errorf("invalid universe address format: %s (expected net.subnet.universe)", s)
+			return 0, fmt.Errorf("invalid universe format: %s (expected net.subnet.universe)", s)
 		}
 		net, err := strconv.Atoi(parts[0])
 		if err != nil {
@@ -92,10 +186,9 @@ func ParseUniverseAddr(s string) (artnet.Universe, error) {
 		return artnet.NewUniverse(uint8(net), uint8(subnet), uint8(universe)), nil
 	}
 
-	// Plain universe number
 	u, err := strconv.Atoi(s)
 	if err != nil {
-		return 0, fmt.Errorf("invalid universe address format: %s", s)
+		return 0, fmt.Errorf("invalid universe: %s", s)
 	}
 	return artnet.Universe(u), nil
 }
@@ -108,37 +201,22 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Validate and normalize mappings
-	for i := range cfg.Mappings {
-		m := &cfg.Mappings[i]
-
-		// Default from_channel to 1 (start of universe)
-		if m.FromChannel == 0 {
-			m.FromChannel = 1
+	for i, m := range cfg.Mappings {
+		if m.From.ChannelStart < 1 || m.From.ChannelStart > 512 {
+			return nil, fmt.Errorf("mapping %d: from channel start must be 1-512", i)
 		}
-
-		// Default to_channel to same as from_channel
-		if m.ToChannel == 0 {
-			m.ToChannel = m.FromChannel
+		if m.From.ChannelEnd < 1 || m.From.ChannelEnd > 512 {
+			return nil, fmt.Errorf("mapping %d: from channel end must be 1-512", i)
 		}
-
-		// Default count to all remaining channels
-		if m.Count == 0 {
-			m.Count = 512 - m.FromChannel + 1
+		if m.From.ChannelStart > m.From.ChannelEnd {
+			return nil, fmt.Errorf("mapping %d: from channel start > end", i)
 		}
-
-		// Validate ranges
-		if m.FromChannel < 1 || m.FromChannel > 512 {
-			return nil, fmt.Errorf("mapping %d: from_channel must be 1-512", i)
+		if m.To.ChannelStart < 1 || m.To.ChannelStart > 512 {
+			return nil, fmt.Errorf("mapping %d: to channel must be 1-512", i)
 		}
-		if m.ToChannel < 1 || m.ToChannel > 512 {
-			return nil, fmt.Errorf("mapping %d: to_channel must be 1-512", i)
-		}
-		if m.FromChannel+m.Count-1 > 512 {
-			return nil, fmt.Errorf("mapping %d: from_channel + count exceeds 512", i)
-		}
-		if m.ToChannel+m.Count-1 > 512 {
-			return nil, fmt.Errorf("mapping %d: to_channel + count exceeds 512", i)
+		toEnd := m.To.ChannelStart + m.From.Count() - 1
+		if toEnd > 512 {
+			return nil, fmt.Errorf("mapping %d: to channels exceed 512", i)
 		}
 	}
 
@@ -160,10 +238,10 @@ func (c *Config) Normalize() []NormalizedMapping {
 	for i, m := range c.Mappings {
 		result[i] = NormalizedMapping{
 			FromUniverse: m.From.Universe,
-			FromChannel:  m.FromChannel - 1, // Convert to 0-indexed
+			FromChannel:  m.From.ChannelStart - 1,
 			ToUniverse:   m.To.Universe,
-			ToChannel:    m.ToChannel - 1, // Convert to 0-indexed
-			Count:        m.Count,
+			ToChannel:    m.To.ChannelStart - 1,
+			Count:        m.From.Count(),
 		}
 	}
 	return result
