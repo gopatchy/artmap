@@ -20,12 +20,7 @@ type Receiver struct {
 }
 
 // NewReceiver creates a new ArtNet receiver
-func NewReceiver(port int, handler PacketHandler) (*Receiver, error) {
-	addr := &net.UDPAddr{
-		Port: port,
-		IP:   net.IPv4zero,
-	}
-
+func NewReceiver(addr *net.UDPAddr, handler PacketHandler) (*Receiver, error) {
 	conn, err := net.ListenUDP("udp4", addr)
 	if err != nil {
 		return nil, err

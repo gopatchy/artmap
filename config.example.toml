@@ -1,5 +1,5 @@
 # artmap configuration
-# Run with: go run . -config config.toml [-port 6454] [-broadcast 2.255.255.255]
+# Run with: go run . -config config.toml [-listen :6454] [-broadcast 2.255.255.255]
 
 # Address format:
 #   from: universe[:channels]  - range specifies which channels to read

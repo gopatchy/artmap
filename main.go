@@ -7,6 +7,8 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/gopatchy/artmap/artnet"
@@ -25,10 +27,16 @@ type App struct {
 
 func main() {
 	configPath := flag.String("config", "config.toml", "path to config file")
-	listenPort := flag.Int("port", artnet.Port, "ArtNet listen port")
+	listenAddr := flag.String("listen", ":6454", "listen address (host:port, host, or :port)")
 	broadcastAddr := flag.String("broadcast", "2.255.255.255", "ArtNet broadcast address")
 	debug := flag.Bool("debug", false, "log ArtNet packets")
 	flag.Parse()
+
+	// Parse listen address
+	addr, err := parseListenAddr(*listenAddr)
+	if err != nil {
+		log.Fatalf("invalid listen address: %v", err)
+	}
 
 	// Load config
 	cfg, err := config.Load(*configPath)
@@ -70,7 +78,7 @@ func main() {
 	}
 
 	// Create receiver
-	receiver, err := artnet.NewReceiver(*listenPort, app)
+	receiver, err := artnet.NewReceiver(addr, app)
 	if err != nil {
 		log.Fatalf("failed to create receiver: %v", err)
 	}
@@ -80,7 +88,7 @@ func main() {
 	receiver.Start()
 	discovery.Start()
 
-	log.Printf("listening on port %d", *listenPort)
+	log.Printf("listening on %s", addr)
 	log.Printf("broadcasting to %s", *broadcastAddr)
 
 	// Wait for interrupt
@@ -154,4 +162,44 @@ func init() {
 	log.SetFlags(log.Ltime | log.Lmicroseconds)
 	fmt.Println("artmap - ArtNet Remapping Proxy")
 	fmt.Println()
+}
+
+// parseListenAddr parses listen address formats:
+// - "host:port" -> bind to specific host and port
+// - "host" -> bind to specific host, default port
+// - ":port" -> bind to all interfaces, specific port
+func parseListenAddr(s string) (*net.UDPAddr, error) {
+	var host string
+	var port int
+
+	if strings.Contains(s, ":") {
+		h, p, err := net.SplitHostPort(s)
+		if err != nil {
+			return nil, err
+		}
+		host = h
+		if p == "" {
+			port = artnet.Port
+		} else {
+			port, err = strconv.Atoi(p)
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		host = s
+		port = artnet.Port
+	}
+
+	var ip net.IP
+	if host == "" {
+		ip = net.IPv4zero
+	} else {
+		ip = net.ParseIP(host)
+		if ip == nil {
+			return nil, fmt.Errorf("invalid IP address: %s", host)
+		}
+	}
+
+	return &net.UDPAddr{IP: ip, Port: port}, nil
 }
