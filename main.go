@@ -24,6 +24,8 @@ type App struct {
 
 func main() {
 	configPath := flag.String("config", "config.toml", "path to config file")
+	listenPort := flag.Int("port", artnet.Port, "ArtNet listen port")
+	broadcastAddr := flag.String("broadcast", "2.255.255.255", "ArtNet broadcast address")
 	flag.Parse()
 
 	// Load config
@@ -49,7 +51,7 @@ func main() {
 	}
 
 	// Create sender
-	sender, err := artnet.NewSender(cfg.Settings.BroadcastAddr)
+	sender, err := artnet.NewSender(*broadcastAddr)
 	if err != nil {
 		log.Fatalf("failed to create sender: %v", err)
 	}
@@ -68,7 +70,7 @@ func main() {
 	}
 
 	// Create receiver
-	receiver, err := artnet.NewReceiver(cfg.Settings.ListenPort, app)
+	receiver, err := artnet.NewReceiver(*listenPort, app)
 	if err != nil {
 		log.Fatalf("failed to create receiver: %v", err)
 	}
@@ -78,8 +80,8 @@ func main() {
 	receiver.Start()
 	discovery.Start()
 
-	log.Printf("listening on port %d", cfg.Settings.ListenPort)
-	log.Printf("broadcasting to %s", cfg.Settings.BroadcastAddr)
+	log.Printf("listening on port %d", *listenPort)
+	log.Printf("broadcasting to %s", *broadcastAddr)
 
 	// Wait for interrupt
 	sigChan := make(chan os.Signal, 1)

@@ -11,14 +11,7 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	Settings Settings  `toml:"settings"`
 	Mappings []Mapping `toml:"mapping"`
-}
-
-// Settings contains global configuration options
-type Settings struct {
-	ListenPort    int    `toml:"listen_port"`
-	BroadcastAddr string `toml:"broadcast_addr"`
 }
 
 // Mapping represents a single channel mapping rule
@@ -72,9 +65,8 @@ func (u *UniverseAddr) UnmarshalTOML(data interface{}) error {
 	}
 }
 
-// ParseUniverseAddr parses various universe address formats:
-// - "0.0.1" or "0.0.1" - Net.Subnet.Universe
-// - "0:0:1" - Net:Subnet:Universe
+// ParseUniverseAddr parses universe address formats:
+// - "0.0.1" - Net.Subnet.Universe
 // - "1" - Universe number only
 func ParseUniverseAddr(s string) (artnet.Universe, error) {
 	s = strings.TrimSpace(s)
@@ -82,44 +74,25 @@ func ParseUniverseAddr(s string) (artnet.Universe, error) {
 	// Try Net.Subnet.Universe format
 	if strings.Contains(s, ".") {
 		parts := strings.Split(s, ".")
-		if len(parts) == 3 {
-			net, err := strconv.Atoi(parts[0])
-			if err != nil {
-				return 0, fmt.Errorf("invalid net: %w", err)
-			}
-			subnet, err := strconv.Atoi(parts[1])
-			if err != nil {
-				return 0, fmt.Errorf("invalid subnet: %w", err)
-			}
-			universe, err := strconv.Atoi(parts[2])
-			if err != nil {
-				return 0, fmt.Errorf("invalid universe: %w", err)
-			}
-			return artnet.NewUniverse(uint8(net), uint8(subnet), uint8(universe)), nil
+		if len(parts) != 3 {
+			return 0, fmt.Errorf("invalid universe address format: %s (expected net.subnet.universe)", s)
 		}
+		net, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return 0, fmt.Errorf("invalid net: %w", err)
+		}
+		subnet, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return 0, fmt.Errorf("invalid subnet: %w", err)
+		}
+		universe, err := strconv.Atoi(parts[2])
+		if err != nil {
+			return 0, fmt.Errorf("invalid universe: %w", err)
+		}
+		return artnet.NewUniverse(uint8(net), uint8(subnet), uint8(universe)), nil
 	}
 
-	// Try Net:Subnet:Universe format
-	if strings.Contains(s, ":") {
-		parts := strings.Split(s, ":")
-		if len(parts) == 3 {
-			net, err := strconv.Atoi(parts[0])
-			if err != nil {
-				return 0, fmt.Errorf("invalid net: %w", err)
-			}
-			subnet, err := strconv.Atoi(parts[1])
-			if err != nil {
-				return 0, fmt.Errorf("invalid subnet: %w", err)
-			}
-			universe, err := strconv.Atoi(parts[2])
-			if err != nil {
-				return 0, fmt.Errorf("invalid universe: %w", err)
-			}
-			return artnet.NewUniverse(uint8(net), uint8(subnet), uint8(universe)), nil
-		}
-	}
-
-	// Try plain universe number
+	// Plain universe number
 	u, err := strconv.Atoi(s)
 	if err != nil {
 		return 0, fmt.Errorf("invalid universe address format: %s", s)
@@ -130,10 +103,6 @@ func ParseUniverseAddr(s string) (artnet.Universe, error) {
 // Load loads configuration from a TOML file
 func Load(path string) (*Config, error) {
 	var cfg Config
-
-	// Set defaults
-	cfg.Settings.ListenPort = artnet.Port
-	cfg.Settings.BroadcastAddr = "2.255.255.255"
 
 	if _, err := toml.DecodeFile(path, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)

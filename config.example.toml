@@ -1,14 +1,9 @@
 # artmap configuration
+# Run with: go run . -config config.toml [-port 6454] [-broadcast 2.255.255.255]
 
-[settings]
-listen_port = 6454              # ArtNet port (default: 6454)
-broadcast_addr = "2.255.255.255" # ArtNet broadcast address
-
-# Universe address formats supported:
+# Universe address formats:
 #   "0.0.1"  - Net.Subnet.Universe
-#   "0:0:1"  - Net:Subnet:Universe
 #   1        - Universe number only (net=0, subnet=0)
-#   "1"      - Universe number as string
 
 # Example: Remap entire universe
 # Maps all 512 channels from universe 0 to universe 5
