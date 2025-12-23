@@ -3,7 +3,6 @@ package sacn
 import (
 	"encoding/binary"
 	"fmt"
-	"log"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -143,37 +142,7 @@ func (r *PcapReceiver) handlePacket(packet gopacket.Packet) {
 	r.handler(universe, dmxData)
 }
 
-// ListInterfaces returns available network interfaces for packet capture
-func ListInterfaces() ([]string, error) {
-	devices, err := pcap.FindAllDevs()
-	if err != nil {
-		return nil, err
-	}
-
-	var names []string
-	for _, dev := range devices {
-		names = append(names, dev.Name)
-	}
-	return names, nil
-}
-
-// DefaultInterface returns a reasonable default interface for capture
+// DefaultInterface returns the default interface for capture
 func DefaultInterface() string {
-	devices, err := pcap.FindAllDevs()
-	if err != nil {
-		return "en0"
-	}
-
-	// Prefer interfaces with addresses
-	for _, dev := range devices {
-		if len(dev.Addresses) > 0 && dev.Name != "lo0" && dev.Name != "lo" {
-			log.Printf("sacn pcap using interface: %s", dev.Name)
-			return dev.Name
-		}
-	}
-
-	if len(devices) > 0 {
-		return devices[0].Name
-	}
-	return "en0"
+	return "any"
 }
