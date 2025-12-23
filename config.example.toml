@@ -1,5 +1,16 @@
 # artmap configuration
-# Run with: go run . -config config.toml [-listen :6454] [-broadcast 2.255.255.255]
+# Run with: go run . -config config.toml [-listen :6454]
+
+# Target addresses for ArtNet output universes
+# Configure the destination IP (broadcast or unicast) for each output universe
+# ArtPoll discovery will be sent to all unique target addresses
+[[target]]
+universe = "0.0.0"
+address = "2.255.255.255"
+
+[[target]]
+universe = "0.0.5"
+address = "10.50.255.255"
 
 # Address format:
 #   from: universe[:channels]  - range specifies which channels to read

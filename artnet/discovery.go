@@ -20,25 +20,27 @@ type Node struct {
 
 // Discovery handles ArtNet node discovery
 type Discovery struct {
-	sender    *Sender
-	nodes     map[string]*Node // keyed by IP string
-	nodesMu   sync.RWMutex
-	localIP   [4]byte
-	shortName string
-	longName  string
-	universes []Universe
-	done      chan struct{}
+	sender      *Sender
+	nodes       map[string]*Node // keyed by IP string
+	nodesMu     sync.RWMutex
+	localIP     [4]byte
+	shortName   string
+	longName    string
+	universes   []Universe
+	pollTargets []*net.UDPAddr
+	done        chan struct{}
 }
 
 // NewDiscovery creates a new discovery handler
-func NewDiscovery(sender *Sender, shortName, longName string, universes []Universe) *Discovery {
+func NewDiscovery(sender *Sender, shortName, longName string, universes []Universe, pollTargets []*net.UDPAddr) *Discovery {
 	return &Discovery{
-		sender:    sender,
-		nodes:     make(map[string]*Node),
-		shortName: shortName,
-		longName:  longName,
-		universes: universes,
-		done:      make(chan struct{}),
+		sender:      sender,
+		nodes:       make(map[string]*Node),
+		shortName:   shortName,
+		longName:    longName,
+		universes:   universes,
+		pollTargets: pollTargets,
+		done:        make(chan struct{}),
 	}
 }
 
@@ -57,10 +59,8 @@ func (d *Discovery) Stop() {
 }
 
 func (d *Discovery) pollLoop() {
-	// Send initial poll
-	if err := d.sender.SendPoll(); err != nil {
-		log.Printf("failed to send ArtPoll: %v", err)
-	}
+	// Send initial poll to all targets
+	d.sendPolls()
 
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -73,11 +73,17 @@ func (d *Discovery) pollLoop() {
 		case <-d.done:
 			return
 		case <-ticker.C:
-			if err := d.sender.SendPoll(); err != nil {
-				log.Printf("failed to send ArtPoll: %v", err)
-			}
+			d.sendPolls()
 		case <-cleanupTicker.C:
 			d.cleanup()
+		}
+	}
+}
+
+func (d *Discovery) sendPolls() {
+	for _, target := range d.pollTargets {
+		if err := d.sender.SendPoll(target); err != nil {
+			log.Printf("failed to send ArtPoll to %s: %v", target.IP, err)
 		}
 	}
 }

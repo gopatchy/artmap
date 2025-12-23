@@ -7,14 +7,13 @@ import (
 
 // Sender sends ArtNet packets
 type Sender struct {
-	conn          *net.UDPConn
-	broadcastAddr *net.UDPAddr
-	sequences     map[Universe]uint8
-	seqMu         sync.Mutex
+	conn      *net.UDPConn
+	sequences map[Universe]uint8
+	seqMu     sync.Mutex
 }
 
 // NewSender creates a new ArtNet sender
-func NewSender(broadcastAddr string) (*Sender, error) {
+func NewSender() (*Sender, error) {
 	// Create a UDP socket for sending
 	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
 	if err != nil {
@@ -27,22 +26,9 @@ func NewSender(broadcastAddr string) (*Sender, error) {
 		return nil, err
 	}
 
-	broadcast, err := net.ResolveUDPAddr("udp4", broadcastAddr+":"+string(rune(Port)))
-	if err != nil {
-		// Try parsing as IP:Port
-		broadcast, err = net.ResolveUDPAddr("udp4", broadcastAddr)
-		if err != nil {
-			broadcast = &net.UDPAddr{
-				IP:   net.ParseIP(broadcastAddr),
-				Port: Port,
-			}
-		}
-	}
-
 	return &Sender{
-		conn:          conn,
-		broadcastAddr: broadcast,
-		sequences:     make(map[Universe]uint8),
+		conn:      conn,
+		sequences: make(map[Universe]uint8),
 	}, nil
 }
 
@@ -62,15 +48,10 @@ func (s *Sender) SendDMX(addr *net.UDPAddr, universe Universe, data []byte) erro
 	return err
 }
 
-// SendDMXBroadcast sends a DMX packet to the broadcast address
-func (s *Sender) SendDMXBroadcast(universe Universe, data []byte) error {
-	return s.SendDMX(s.broadcastAddr, universe, data)
-}
-
-// SendPoll sends an ArtPoll packet to the broadcast address
-func (s *Sender) SendPoll() error {
+// SendPoll sends an ArtPoll packet to the specified address
+func (s *Sender) SendPoll(addr *net.UDPAddr) error {
 	pkt := BuildPollPacket()
-	_, err := s.conn.WriteToUDP(pkt, s.broadcastAddr)
+	_, err := s.conn.WriteToUDP(pkt, addr)
 	return err
 }
 
@@ -84,9 +65,4 @@ func (s *Sender) SendPollReply(addr *net.UDPAddr, localIP [4]byte, shortName, lo
 // Close closes the sender
 func (s *Sender) Close() error {
 	return s.conn.Close()
-}
-
-// BroadcastAddr returns the configured broadcast address
-func (s *Sender) BroadcastAddr() *net.UDPAddr {
-	return s.broadcastAddr
 }

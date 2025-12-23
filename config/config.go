@@ -11,7 +11,39 @@ import (
 
 // Config represents the application configuration
 type Config struct {
+	Targets  []Target  `toml:"target"`
 	Mappings []Mapping `toml:"mapping"`
+}
+
+// Target represents a target address for an output universe
+type Target struct {
+	Universe TargetUniverse `toml:"universe"`
+	Address  string         `toml:"address"`
+}
+
+// TargetUniverse is a universe that can be parsed from string or int
+type TargetUniverse struct {
+	artnet.Universe
+}
+
+func (t *TargetUniverse) UnmarshalTOML(data interface{}) error {
+	switch v := data.(type) {
+	case string:
+		u, err := parseUniverse(v)
+		if err != nil {
+			return err
+		}
+		t.Universe = u
+		return nil
+	case int64:
+		t.Universe = artnet.Universe(v)
+		return nil
+	case float64:
+		t.Universe = artnet.Universe(int64(v))
+		return nil
+	default:
+		return fmt.Errorf("unsupported universe type: %T", data)
+	}
 }
 
 // Protocol specifies the output protocol
@@ -211,6 +243,13 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Validate targets
+	for i, t := range cfg.Targets {
+		if t.Address == "" {
+			return nil, fmt.Errorf("target %d: address is required", i)
+		}
+	}
+
 	for i := range cfg.Mappings {
 		m := &cfg.Mappings[i]
 		if m.From.ChannelStart < 1 || m.From.ChannelStart > 512 {
@@ -283,6 +322,15 @@ func (c *Config) SACNSourceUniverses() []uint16 {
 	result := make([]uint16, 0, len(seen))
 	for u := range seen {
 		result = append(result, u)
+	}
+	return result
+}
+
+// TargetMap returns a map of universe to target address
+func (c *Config) TargetMap() map[artnet.Universe]string {
+	result := make(map[artnet.Universe]string)
+	for _, t := range c.Targets {
+		result[t.Universe.Universe] = t.Address
 	}
 	return result
 }
