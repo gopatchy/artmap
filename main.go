@@ -31,46 +31,40 @@ type App struct {
 
 func main() {
 	configPath := flag.String("config", "config.toml", "path to config file")
-	listenAddr := flag.String("listen", ":6454", "listen address (host:port, host, or :port)")
-	debug := flag.Bool("debug", false, "log ArtNet packets")
+	artnetListen := flag.String("artnet-listen", ":6454", "artnet listen address (empty to disable)")
+	debug := flag.Bool("debug", false, "log incoming/outgoing dmx packets")
 	flag.Parse()
-
-	// Parse listen address
-	addr, err := parseListenAddr(*listenAddr)
-	if err != nil {
-		log.Fatalf("invalid listen address: %v", err)
-	}
 
 	// Load config
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		log.Fatalf("config error: %v", err)
 	}
 
-	log.Printf("loaded %d mappings", len(cfg.Mappings))
+	log.Printf("loaded mappings=%d", len(cfg.Mappings))
 
 	// Create remapping engine
 	engine := remap.NewEngine(cfg.Normalize())
 
 	// Log mappings
 	for _, m := range cfg.Mappings {
-		toEnd := m.To.ChannelStart + m.From.Count() - 1
-		log.Printf("  [%s] %s:%d-%d -> [%s] %s:%d-%d",
-			m.FromProto, m.From.Universe, m.From.ChannelStart, m.From.ChannelEnd,
-			m.Protocol, m.To.Universe, m.To.ChannelStart, toEnd)
+		log.Printf("  %s -> %s", m.From, m.To)
 	}
 
 	// Parse targets
 	targets := make(map[artnet.Universe]*net.UDPAddr)
 	pollTargets := make(map[string]*net.UDPAddr) // dedupe by address string
 	for _, t := range cfg.Targets {
+		if t.Universe.Protocol != config.ProtocolArtNet {
+			continue // only artnet targets need addresses
+		}
 		addr, err := parseTargetAddr(t.Address)
 		if err != nil {
-			log.Fatalf("invalid target address %q: %v", t.Address, err)
+			log.Fatalf("target error: address=%q err=%v", t.Address, err)
 		}
 		targets[t.Universe.Universe] = addr
 		pollTargets[addr.String()] = addr
-		log.Printf("  target %s -> %s", t.Universe.Universe, addr)
+		log.Printf("  target %s -> %s", t.Universe, addr)
 	}
 
 	// Convert poll targets to slice
@@ -82,14 +76,14 @@ func main() {
 	// Create ArtNet sender
 	artSender, err := artnet.NewSender()
 	if err != nil {
-		log.Fatalf("failed to create artnet sender: %v", err)
+		log.Fatalf("artnet sender error: %v", err)
 	}
 	defer artSender.Close()
 
 	// Create sACN sender
 	sacnSender, err := sacn.NewSender("artmap")
 	if err != nil {
-		log.Fatalf("failed to create sacn sender: %v", err)
+		log.Fatalf("sacn sender error: %v", err)
 	}
 	defer sacnSender.Close()
 
@@ -108,38 +102,45 @@ func main() {
 		debug:      *debug,
 	}
 
-	// Create ArtNet receiver
-	artReceiver, err := artnet.NewReceiver(addr, app)
-	if err != nil {
-		log.Fatalf("failed to create artnet receiver: %v", err)
+	// Create ArtNet receiver if enabled
+	if *artnetListen != "" {
+		addr, err := parseListenAddr(*artnetListen)
+		if err != nil {
+			log.Fatalf("artnet listen error: %v", err)
+		}
+		artReceiver, err := artnet.NewReceiver(addr, app)
+		if err != nil {
+			log.Fatalf("artnet receiver error: %v", err)
+		}
+		app.artReceiver = artReceiver
+		artReceiver.Start()
+		log.Printf("artnet listening addr=%s", addr)
 	}
-	app.artReceiver = artReceiver
 
 	// Create sACN receiver if needed
 	sacnUniverses := cfg.SACNSourceUniverses()
 	if len(sacnUniverses) > 0 {
 		sacnReceiver, err := sacn.NewReceiver(sacnUniverses, app.HandleSACN)
 		if err != nil {
-			log.Fatalf("failed to create sacn receiver: %v", err)
+			log.Fatalf("sacn receiver error: %v", err)
 		}
 		app.sacnReceiver = sacnReceiver
 		sacnReceiver.Start()
-		log.Printf("listening for sACN on universes %v", sacnUniverses)
+		log.Printf("sacn listening universes=%v", sacnUniverses)
 	}
 
-	// Start everything
-	artReceiver.Start()
+	// Start discovery
 	discovery.Start()
-
-	log.Printf("listening for ArtNet on %s", addr)
 
 	// Wait for interrupt
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
-	log.Println("shutting down...")
-	artReceiver.Stop()
+	log.Println("shutting down")
+	if app.artReceiver != nil {
+		app.artReceiver.Stop()
+	}
 	if app.sacnReceiver != nil {
 		app.sacnReceiver.Stop()
 	}
@@ -149,58 +150,17 @@ func main() {
 // HandleDMX implements artnet.PacketHandler
 func (a *App) HandleDMX(src *net.UDPAddr, pkt *artnet.DMXPacket) {
 	if a.debug {
-		log.Printf("recv ArtNet from %s: universe=%s seq=%d len=%d",
+		log.Printf("[<-artnet] src=%s universe=%s seq=%d len=%d",
 			src.IP, pkt.Universe, pkt.Sequence, pkt.Length)
 	}
 
-	// Apply remapping
-	outputs := a.engine.Remap(config.ProtocolArtNet, pkt.Universe, pkt.Data)
-
-	// Send remapped outputs
-	for _, out := range outputs {
-		switch out.Protocol {
-		case config.ProtocolSACN:
-			if a.debug {
-				log.Printf("send sACN multicast: universe=%d", uint16(out.Universe))
-			}
-			if err := a.sacnSender.SendDMX(uint16(out.Universe), out.Data[:]); err != nil {
-				log.Printf("failed to send sACN: %v", err)
-			}
-
-		default: // ArtNet
-			nodes := a.discovery.GetNodesForUniverse(out.Universe)
-
-			if len(nodes) > 0 {
-				for _, node := range nodes {
-					addr := &net.UDPAddr{
-						IP:   node.IP,
-						Port: int(node.Port),
-					}
-					if a.debug {
-						log.Printf("send ArtNet to %s: universe=%s", node.IP, out.Universe)
-					}
-					if err := a.artSender.SendDMX(addr, out.Universe, out.Data[:]); err != nil {
-						log.Printf("failed to send to %s: %v", node.IP, err)
-					}
-				}
-			} else if target, ok := a.targets[out.Universe]; ok {
-				if a.debug {
-					log.Printf("send ArtNet to %s: universe=%s", target.IP, out.Universe)
-				}
-				if err := a.artSender.SendDMX(target, out.Universe, out.Data[:]); err != nil {
-					log.Printf("failed to send to %s: %v", target.IP, err)
-				}
-			} else {
-				log.Printf("no target configured for universe %s", out.Universe)
-			}
-		}
-	}
+	a.sendOutputs(a.engine.Remap(config.ProtocolArtNet, pkt.Universe, pkt.Data))
 }
 
 // HandlePoll implements artnet.PacketHandler
 func (a *App) HandlePoll(src *net.UDPAddr, pkt *artnet.PollPacket) {
 	if a.debug {
-		log.Printf("recv Poll from %s", src.IP)
+		log.Printf("[<-artnet] poll src=%s", src.IP)
 	}
 	a.discovery.HandlePoll(src)
 }
@@ -208,7 +168,7 @@ func (a *App) HandlePoll(src *net.UDPAddr, pkt *artnet.PollPacket) {
 // HandlePollReply implements artnet.PacketHandler
 func (a *App) HandlePollReply(src *net.UDPAddr, pkt *artnet.PollReplyPacket) {
 	if a.debug {
-		log.Printf("recv PollReply from %s", src.IP)
+		log.Printf("[<-artnet] pollreply src=%s", src.IP)
 	}
 	a.discovery.HandlePollReply(src, pkt)
 }
@@ -216,21 +176,21 @@ func (a *App) HandlePollReply(src *net.UDPAddr, pkt *artnet.PollReplyPacket) {
 // HandleSACN handles incoming sACN DMX data
 func (a *App) HandleSACN(universe uint16, data [512]byte) {
 	if a.debug {
-		log.Printf("recv sACN: universe=%d", universe)
+		log.Printf("[<-sacn] universe=%d", universe)
 	}
 
-	// Apply remapping
-	outputs := a.engine.Remap(config.ProtocolSACN, artnet.Universe(universe), data)
+	a.sendOutputs(a.engine.Remap(config.ProtocolSACN, artnet.Universe(universe), data))
+}
 
-	// Send remapped outputs
+func (a *App) sendOutputs(outputs []remap.Output) {
 	for _, out := range outputs {
 		switch out.Protocol {
 		case config.ProtocolSACN:
 			if a.debug {
-				log.Printf("send sACN multicast: universe=%d", uint16(out.Universe))
+				log.Printf("[->sacn] universe=%d", uint16(out.Universe))
 			}
 			if err := a.sacnSender.SendDMX(uint16(out.Universe), out.Data[:]); err != nil {
-				log.Printf("failed to send sACN: %v", err)
+				log.Printf("[->sacn] error: universe=%d err=%v", uint16(out.Universe), err)
 			}
 
 		default: // ArtNet
@@ -243,21 +203,21 @@ func (a *App) HandleSACN(universe uint16, data [512]byte) {
 						Port: int(node.Port),
 					}
 					if a.debug {
-						log.Printf("send ArtNet to %s: universe=%s", node.IP, out.Universe)
+						log.Printf("[->artnet] dst=%s universe=%s", node.IP, out.Universe)
 					}
 					if err := a.artSender.SendDMX(addr, out.Universe, out.Data[:]); err != nil {
-						log.Printf("failed to send to %s: %v", node.IP, err)
+						log.Printf("[->artnet] error: dst=%s err=%v", node.IP, err)
 					}
 				}
 			} else if target, ok := a.targets[out.Universe]; ok {
 				if a.debug {
-					log.Printf("send ArtNet to %s: universe=%s", target.IP, out.Universe)
+					log.Printf("[->artnet] dst=%s universe=%s", target.IP, out.Universe)
 				}
 				if err := a.artSender.SendDMX(target, out.Universe, out.Data[:]); err != nil {
-					log.Printf("failed to send to %s: %v", target.IP, err)
+					log.Printf("[->artnet] error: dst=%s err=%v", target.IP, err)
 				}
 			} else {
-				log.Printf("no target configured for universe %s", out.Universe)
+				log.Printf("[->artnet] no target: universe=%s", out.Universe)
 			}
 		}
 	}

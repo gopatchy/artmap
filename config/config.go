@@ -17,33 +17,45 @@ type Config struct {
 
 // Target represents a target address for an output universe
 type Target struct {
-	Universe TargetUniverse `toml:"universe"`
-	Address  string         `toml:"address"`
+	Universe TargetAddr `toml:"universe"`
+	Address  string     `toml:"address"`
 }
 
-// TargetUniverse is a universe that can be parsed from string or int
-type TargetUniverse struct {
-	artnet.Universe
+// TargetAddr is a protocol-prefixed universe address
+type TargetAddr struct {
+	Protocol Protocol
+	Universe artnet.Universe
 }
 
-func (t *TargetUniverse) UnmarshalTOML(data interface{}) error {
+func (t *TargetAddr) UnmarshalTOML(data interface{}) error {
 	switch v := data.(type) {
 	case string:
-		u, err := parseUniverse(v)
+		proto, rest, err := splitProtoPrefix(v)
+		if err != nil {
+			return err
+		}
+		t.Protocol = proto
+		u, err := parseUniverse(rest)
 		if err != nil {
 			return err
 		}
 		t.Universe = u
 		return nil
 	case int64:
+		t.Protocol = ProtocolArtNet
 		t.Universe = artnet.Universe(v)
 		return nil
 	case float64:
+		t.Protocol = ProtocolArtNet
 		t.Universe = artnet.Universe(int64(v))
 		return nil
 	default:
 		return fmt.Errorf("unsupported universe type: %T", data)
 	}
+}
+
+func (t TargetAddr) String() string {
+	return fmt.Sprintf("%s:%s", t.Protocol, t.Universe)
 }
 
 // Protocol specifies the output protocol
@@ -56,14 +68,13 @@ const (
 
 // Mapping represents a single channel mapping rule
 type Mapping struct {
-	From      FromAddr `toml:"from"`
-	FromProto Protocol `toml:"from_proto"`
-	To        ToAddr   `toml:"to"`
-	Protocol  Protocol `toml:"proto"`
+	From FromAddr `toml:"from"`
+	To   ToAddr   `toml:"to"`
 }
 
 // FromAddr represents a source universe address with channel range
 type FromAddr struct {
+	Protocol     Protocol
 	Universe     artnet.Universe
 	ChannelStart int // 1-indexed
 	ChannelEnd   int // 1-indexed
@@ -74,11 +85,13 @@ func (a *FromAddr) UnmarshalTOML(data interface{}) error {
 	case string:
 		return a.parse(v)
 	case int64:
+		a.Protocol = ProtocolArtNet
 		a.Universe = artnet.Universe(v)
 		a.ChannelStart = 1
 		a.ChannelEnd = 512
 		return nil
 	case float64:
+		a.Protocol = ProtocolArtNet
 		a.Universe = artnet.Universe(int64(v))
 		a.ChannelStart = 1
 		a.ChannelEnd = 512
@@ -88,15 +101,21 @@ func (a *FromAddr) UnmarshalTOML(data interface{}) error {
 	}
 }
 
-// parse parses address formats:
-// - "0.0.1" - all channels
-// - "0.0.1:50" - single channel
-// - "0.0.1:50-" - channel 50 through end
-// - "0.0.1:50-100" - channel range
+// parse parses address formats with protocol prefix:
+// - "artnet:0.0.1" - all channels
+// - "sacn:64:50" - single channel
+// - "artnet:0.0.1:50-" - channel 50 through end
+// - "sacn:1:50-100" - channel range
 func (a *FromAddr) parse(s string) error {
 	s = strings.TrimSpace(s)
 
-	universeStr, channelSpec := splitAddr(s)
+	proto, rest, err := splitProtoPrefix(s)
+	if err != nil {
+		return err
+	}
+	a.Protocol = proto
+
+	universeStr, channelSpec := splitAddr(rest)
 
 	universe, err := parseUniverse(universeStr)
 	if err != nil {
@@ -141,12 +160,23 @@ func (a *FromAddr) parse(s string) error {
 	return nil
 }
 
+func (a FromAddr) String() string {
+	if a.ChannelStart == 1 && a.ChannelEnd == 512 {
+		return fmt.Sprintf("%s:%s", a.Protocol, a.Universe)
+	}
+	if a.ChannelStart == a.ChannelEnd {
+		return fmt.Sprintf("%s:%s:%d", a.Protocol, a.Universe, a.ChannelStart)
+	}
+	return fmt.Sprintf("%s:%s:%d-%d", a.Protocol, a.Universe, a.ChannelStart, a.ChannelEnd)
+}
+
 func (a *FromAddr) Count() int {
 	return a.ChannelEnd - a.ChannelStart + 1
 }
 
 // ToAddr represents a destination universe address with starting channel
 type ToAddr struct {
+	Protocol     Protocol
 	Universe     artnet.Universe
 	ChannelStart int // 1-indexed
 }
@@ -156,10 +186,12 @@ func (a *ToAddr) UnmarshalTOML(data interface{}) error {
 	case string:
 		return a.parse(v)
 	case int64:
+		a.Protocol = ProtocolArtNet
 		a.Universe = artnet.Universe(v)
 		a.ChannelStart = 1
 		return nil
 	case float64:
+		a.Protocol = ProtocolArtNet
 		a.Universe = artnet.Universe(int64(v))
 		a.ChannelStart = 1
 		return nil
@@ -168,13 +200,19 @@ func (a *ToAddr) UnmarshalTOML(data interface{}) error {
 	}
 }
 
-// parse parses address formats:
-// - "0.0.1" - starting at channel 1
-// - "0.0.1:50" - starting at channel 50
+// parse parses address formats with protocol prefix:
+// - "artnet:0.0.1" - starting at channel 1
+// - "sacn:1:50" - starting at channel 50
 func (a *ToAddr) parse(s string) error {
 	s = strings.TrimSpace(s)
 
-	universeStr, channelSpec := splitAddr(s)
+	proto, rest, err := splitProtoPrefix(s)
+	if err != nil {
+		return err
+	}
+	a.Protocol = proto
+
+	universeStr, channelSpec := splitAddr(rest)
 
 	universe, err := parseUniverse(universeStr)
 	if err != nil {
@@ -198,6 +236,23 @@ func (a *ToAddr) parse(s string) error {
 	a.ChannelStart = ch
 
 	return nil
+}
+
+func (a ToAddr) String() string {
+	if a.ChannelStart == 1 {
+		return fmt.Sprintf("%s:%s", a.Protocol, a.Universe)
+	}
+	return fmt.Sprintf("%s:%s:%d", a.Protocol, a.Universe, a.ChannelStart)
+}
+
+func splitProtoPrefix(s string) (Protocol, string, error) {
+	if strings.HasPrefix(s, "artnet:") {
+		return ProtocolArtNet, s[7:], nil
+	}
+	if strings.HasPrefix(s, "sacn:") {
+		return ProtocolSACN, s[5:], nil
+	}
+	return "", "", fmt.Errorf("address must start with 'artnet:' or 'sacn:' prefix")
 }
 
 func splitAddr(s string) (universe, channel string) {
@@ -250,8 +305,7 @@ func Load(path string) (*Config, error) {
 		}
 	}
 
-	for i := range cfg.Mappings {
-		m := &cfg.Mappings[i]
+	for i, m := range cfg.Mappings {
 		if m.From.ChannelStart < 1 || m.From.ChannelStart > 512 {
 			return nil, fmt.Errorf("mapping %d: from channel start must be 1-512", i)
 		}
@@ -267,16 +321,6 @@ func Load(path string) (*Config, error) {
 		toEnd := m.To.ChannelStart + m.From.Count() - 1
 		if toEnd > 512 {
 			return nil, fmt.Errorf("mapping %d: to channels exceed 512", i)
-		}
-		if m.FromProto == "" {
-			m.FromProto = ProtocolArtNet
-		} else if m.FromProto != ProtocolArtNet && m.FromProto != ProtocolSACN {
-			return nil, fmt.Errorf("mapping %d: from_proto must be 'artnet' or 'sacn'", i)
-		}
-		if m.Protocol == "" {
-			m.Protocol = ProtocolArtNet
-		} else if m.Protocol != ProtocolArtNet && m.Protocol != ProtocolSACN {
-			return nil, fmt.Errorf("mapping %d: proto must be 'artnet' or 'sacn'", i)
 		}
 	}
 
@@ -301,11 +345,11 @@ func (c *Config) Normalize() []NormalizedMapping {
 		result[i] = NormalizedMapping{
 			FromUniverse: m.From.Universe,
 			FromChannel:  m.From.ChannelStart - 1,
-			FromProto:    m.FromProto,
+			FromProto:    m.From.Protocol,
 			ToUniverse:   m.To.Universe,
 			ToChannel:    m.To.ChannelStart - 1,
 			Count:        m.From.Count(),
-			Protocol:     m.Protocol,
+			Protocol:     m.To.Protocol,
 		}
 	}
 	return result
@@ -315,22 +359,13 @@ func (c *Config) Normalize() []NormalizedMapping {
 func (c *Config) SACNSourceUniverses() []uint16 {
 	seen := make(map[uint16]bool)
 	for _, m := range c.Mappings {
-		if m.FromProto == ProtocolSACN {
+		if m.From.Protocol == ProtocolSACN {
 			seen[uint16(m.From.Universe)] = true
 		}
 	}
 	result := make([]uint16, 0, len(seen))
 	for u := range seen {
 		result = append(result, u)
-	}
-	return result
-}
-
-// TargetMap returns a map of universe to target address
-func (c *Config) TargetMap() map[artnet.Universe]string {
-	result := make(map[artnet.Universe]string)
-	for _, t := range c.Targets {
-		result[t.Universe.Universe] = t.Address
 	}
 	return result
 }

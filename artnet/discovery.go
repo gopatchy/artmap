@@ -83,7 +83,7 @@ func (d *Discovery) pollLoop() {
 func (d *Discovery) sendPolls() {
 	for _, target := range d.pollTargets {
 		if err := d.sender.SendPoll(target); err != nil {
-			log.Printf("failed to send ArtPoll to %s: %v", target.IP, err)
+			log.Printf("[->artnet] poll error: dst=%s err=%v", target.IP, err)
 		}
 	}
 }
@@ -95,7 +95,7 @@ func (d *Discovery) cleanup() {
 	cutoff := time.Now().Add(-60 * time.Second)
 	for ip, node := range d.nodes {
 		if node.LastSeen.Before(cutoff) {
-			log.Printf("node %s (%s) timed out", ip, node.ShortName)
+			log.Printf("discovery timeout: ip=%s name=%s", ip, node.ShortName)
 			delete(d.nodes, ip)
 		}
 	}
@@ -153,7 +153,7 @@ func (d *Discovery) HandlePollReply(src *net.UDPAddr, pkt *PollReplyPacket) {
 			Port: uint16(src.Port),
 		}
 		d.nodes[ip] = node
-		log.Printf("discovered node: %s (%s) - universes: %v", ip, shortName, universes)
+		log.Printf("discovery found: ip=%s name=%s universes=%v", ip, shortName, universes)
 	}
 
 	node.ShortName = shortName
@@ -168,7 +168,7 @@ func (d *Discovery) HandlePoll(src *net.UDPAddr) {
 	// Respond with our info
 	err := d.sender.SendPollReply(src, d.localIP, d.shortName, d.longName, d.universes)
 	if err != nil {
-		log.Printf("failed to send ArtPollReply: %v", err)
+		log.Printf("[->artnet] pollreply error: dst=%s err=%v", src.IP, err)
 	}
 }
 
