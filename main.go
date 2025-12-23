@@ -18,20 +18,22 @@ import (
 )
 
 type App struct {
-	cfg          *config.Config
-	artReceiver  *artnet.Receiver
-	sacnReceiver *sacn.Receiver
-	artSender    *artnet.Sender
-	sacnSender   *sacn.Sender
-	discovery    *artnet.Discovery
-	engine       *remap.Engine
-	targets      map[artnet.Universe]*net.UDPAddr
-	debug        bool
+	cfg              *config.Config
+	artReceiver      *artnet.Receiver
+	sacnReceiver     *sacn.Receiver
+	sacnPcapReceiver *sacn.PcapReceiver
+	artSender        *artnet.Sender
+	sacnSender       *sacn.Sender
+	discovery        *artnet.Discovery
+	engine           *remap.Engine
+	targets          map[artnet.Universe]*net.UDPAddr
+	debug            bool
 }
 
 func main() {
 	configPath := flag.String("config", "config.toml", "path to config file")
 	artnetListen := flag.String("artnet-listen", ":6454", "artnet listen address (empty to disable)")
+	sacnPcap := flag.String("sacn-pcap", "", "use pcap for sacn on interface (e.g. en0, eth0)")
 	debug := flag.Bool("debug", false, "log incoming/outgoing dmx packets")
 	flag.Parse()
 
@@ -120,13 +122,29 @@ func main() {
 	// Create sACN receiver if needed
 	sacnUniverses := cfg.SACNSourceUniverses()
 	if len(sacnUniverses) > 0 {
-		sacnReceiver, err := sacn.NewReceiver(sacnUniverses, app.HandleSACN)
-		if err != nil {
-			log.Fatalf("sacn receiver error: %v", err)
+		if *sacnPcap != "" {
+			// Use pcap-based receiver (requires root, avoids port conflicts)
+			iface := *sacnPcap
+			if iface == "auto" {
+				iface = sacn.DefaultInterface()
+			}
+			pcapReceiver, err := sacn.NewPcapReceiver(iface, sacnUniverses, app.HandleSACN)
+			if err != nil {
+				log.Fatalf("sacn pcap error: %v", err)
+			}
+			app.sacnPcapReceiver = pcapReceiver
+			pcapReceiver.Start()
+			log.Printf("sacn pcap listening iface=%s universes=%v", iface, sacnUniverses)
+		} else {
+			// Use standard UDP receiver
+			sacnReceiver, err := sacn.NewReceiver(sacnUniverses, app.HandleSACN)
+			if err != nil {
+				log.Fatalf("sacn receiver error: %v", err)
+			}
+			app.sacnReceiver = sacnReceiver
+			sacnReceiver.Start()
+			log.Printf("sacn listening universes=%v", sacnUniverses)
 		}
-		app.sacnReceiver = sacnReceiver
-		sacnReceiver.Start()
-		log.Printf("sacn listening universes=%v", sacnUniverses)
 	}
 
 	// Start discovery
@@ -143,6 +161,9 @@ func main() {
 	}
 	if app.sacnReceiver != nil {
 		app.sacnReceiver.Stop()
+	}
+	if app.sacnPcapReceiver != nil {
+		app.sacnPcapReceiver.Stop()
 	}
 	discovery.Stop()
 }

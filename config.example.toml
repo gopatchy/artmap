@@ -1,5 +1,8 @@
 # artmap configuration
-# Run with: go run . -config config.toml [-artnet-listen :6454]
+# Run with: go run . -config config.toml [-artnet-listen :6454] [-sacn-pcap en0]
+#
+# Use -sacn-pcap <interface> to capture sACN via pcap instead of binding port 5568.
+# This avoids port conflicts but requires root. Use "auto" for auto-detect.
 
 # Target addresses for ArtNet output universes
 # Each output universe needs a target IP (broadcast or unicast)
