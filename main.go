@@ -297,8 +297,6 @@ func (a *App) sendOutputs(outputs []remap.Output) {
 
 func init() {
 	log.SetFlags(log.Ltime | log.Lmicroseconds)
-	fmt.Println("artmap - ArtNet Remapping Proxy")
-	fmt.Println()
 }
 
 // parseListenAddr parses listen address formats:
