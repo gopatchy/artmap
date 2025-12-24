@@ -257,9 +257,15 @@ func (a *App) sendOutputs(outputs []remap.Output) {
 			}
 
 		default: // ArtNet
-			nodes := a.discovery.GetNodesForUniverse(out.Universe)
-
-			if len(nodes) > 0 {
+			// Configured target takes priority over discovery
+			if target, ok := a.targets[out.Universe]; ok {
+				if a.debug {
+					log.Printf("[->artnet] dst=%s universe=%s", target.IP, out.Universe)
+				}
+				if err := a.artSender.SendDMX(target, out.Universe, out.Data[:]); err != nil {
+					log.Printf("[->artnet] error: dst=%s err=%v", target.IP, err)
+				}
+			} else if nodes := a.discovery.GetNodesForUniverse(out.Universe); len(nodes) > 0 {
 				for _, node := range nodes {
 					addr := &net.UDPAddr{
 						IP:   node.IP,
@@ -271,13 +277,6 @@ func (a *App) sendOutputs(outputs []remap.Output) {
 					if err := a.artSender.SendDMX(addr, out.Universe, out.Data[:]); err != nil {
 						log.Printf("[->artnet] error: dst=%s err=%v", node.IP, err)
 					}
-				}
-			} else if target, ok := a.targets[out.Universe]; ok {
-				if a.debug {
-					log.Printf("[->artnet] dst=%s universe=%s", target.IP, out.Universe)
-				}
-				if err := a.artSender.SendDMX(target, out.Universe, out.Data[:]); err != nil {
-					log.Printf("[->artnet] error: dst=%s err=%v", target.IP, err)
 				}
 			} else if len(a.broadcasts) > 0 {
 				for _, bcast := range a.broadcasts {
