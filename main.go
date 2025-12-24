@@ -20,6 +20,7 @@ import (
 type App struct {
 	cfg              *config.Config
 	artReceiver      *artnet.Receiver
+	artPcapReceiver  *artnet.PcapReceiver
 	sacnReceiver     *sacn.Receiver
 	sacnPcapReceiver *sacn.PcapReceiver
 	artSender        *artnet.Sender
@@ -34,8 +35,9 @@ type App struct {
 func main() {
 	configPath := flag.String("config", "config.toml", "path to config file")
 	artnetListen := flag.String("artnet-listen", ":6454", "artnet listen address (empty to disable)")
+	artnetPcap := flag.String("artnet-pcap", "", "use pcap for artnet on interface (e.g. en0, any)")
 	artnetBroadcast := flag.String("artnet-broadcast", "auto", "artnet broadcast addresses (comma-separated, or 'auto')")
-	sacnPcap := flag.String("sacn-pcap", "", "use pcap for sacn on interface (e.g. en0, eth0)")
+	sacnPcap := flag.String("sacn-pcap", "", "use pcap for sacn on interface (e.g. en0, any)")
 	debug := flag.Bool("debug", false, "log incoming/outgoing dmx packets")
 	flag.Parse()
 
@@ -129,7 +131,20 @@ func main() {
 	}
 
 	// Create ArtNet receiver if enabled
-	if *artnetListen != "" {
+	if *artnetPcap != "" {
+		// Use pcap-based receiver (requires root, avoids port conflicts)
+		iface := *artnetPcap
+		if iface == "auto" {
+			iface = "any"
+		}
+		pcapReceiver, err := artnet.NewPcapReceiver(iface, app)
+		if err != nil {
+			log.Fatalf("artnet pcap error: %v", err)
+		}
+		app.artPcapReceiver = pcapReceiver
+		pcapReceiver.Start()
+		log.Printf("[artnet] pcap listening iface=%s", iface)
+	} else if *artnetListen != "" {
 		addr, err := parseListenAddr(*artnetListen)
 		if err != nil {
 			log.Fatalf("artnet listen error: %v", err)
@@ -182,6 +197,9 @@ func main() {
 	log.Println("[main] shutting down")
 	if app.artReceiver != nil {
 		app.artReceiver.Stop()
+	}
+	if app.artPcapReceiver != nil {
+		app.artPcapReceiver.Stop()
 	}
 	if app.sacnReceiver != nil {
 		app.sacnReceiver.Stop()
