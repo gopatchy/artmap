@@ -150,7 +150,7 @@ func (d *Discovery) HandlePollReply(src *net.UDPAddr, pkt *PollReplyPacket) {
 	if !exists {
 		node = &Node{
 			IP:   src.IP,
-			Port: uint16(src.Port),
+			Port: pkt.Port, // Use port from packet, not UDP source port
 		}
 		d.nodes[ip] = node
 		log.Printf("[artnet] discovered ip=%s name=%s universes=%v", ip, shortName, universes)
@@ -186,6 +186,14 @@ func (d *Discovery) GetNodesForUniverse(universe Universe) []*Node {
 			}
 		}
 	}
+
+	if len(result) == 0 && len(d.nodes) > 0 {
+		log.Printf("[artnet] no nodes for universe=%s, have %d nodes", universe, len(d.nodes))
+		for ip, node := range d.nodes {
+			log.Printf("[artnet]   node ip=%s universes=%v", ip, node.Universes)
+		}
+	}
+
 	return result
 }
 
