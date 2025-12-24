@@ -95,7 +95,7 @@ func (d *Discovery) cleanup() {
 	cutoff := time.Now().Add(-60 * time.Second)
 	for ip, node := range d.nodes {
 		if node.LastSeen.Before(cutoff) {
-			log.Printf("discovery timeout: ip=%s name=%s", ip, node.ShortName)
+			log.Printf("[artnet] node timeout ip=%s name=%s", ip, node.ShortName)
 			delete(d.nodes, ip)
 		}
 	}
@@ -153,7 +153,7 @@ func (d *Discovery) HandlePollReply(src *net.UDPAddr, pkt *PollReplyPacket) {
 			Port: uint16(src.Port),
 		}
 		d.nodes[ip] = node
-		log.Printf("discovery found: ip=%s name=%s universes=%v", ip, shortName, universes)
+		log.Printf("[artnet] discovered ip=%s name=%s universes=%v", ip, shortName, universes)
 	}
 
 	node.ShortName = shortName

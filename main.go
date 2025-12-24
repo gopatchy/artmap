@@ -34,7 +34,7 @@ type App struct {
 func main() {
 	configPath := flag.String("config", "config.toml", "path to config file")
 	artnetListen := flag.String("artnet-listen", ":6454", "artnet listen address (empty to disable)")
-	artnetBroadcast := flag.String("artnet-broadcast", "", "artnet broadcast addresses (comma-separated, or 'auto')")
+	artnetBroadcast := flag.String("artnet-broadcast", "auto", "artnet broadcast addresses (comma-separated, or 'auto')")
 	sacnPcap := flag.String("sacn-pcap", "", "use pcap for sacn on interface (e.g. en0, eth0)")
 	debug := flag.Bool("debug", false, "log incoming/outgoing dmx packets")
 	flag.Parse()
@@ -45,14 +45,14 @@ func main() {
 		log.Fatalf("config error: %v", err)
 	}
 
-	log.Printf("loaded mappings=%d", len(cfg.Mappings))
+	log.Printf("[config] loaded mappings=%d", len(cfg.Mappings))
 
 	// Create remapping engine
 	engine := remap.NewEngine(cfg.Normalize())
 
 	// Log mappings
 	for _, m := range cfg.Mappings {
-		log.Printf("  %s -> %s", m.From, m.To)
+		log.Printf("[config]   %s -> %s", m.From, m.To)
 	}
 
 	// Parse targets
@@ -68,7 +68,7 @@ func main() {
 		}
 		targets[t.Universe.Universe] = addr
 		pollTargets[addr.String()] = addr
-		log.Printf("  target %s -> %s", t.Universe, addr)
+		log.Printf("[config]   target %s -> %s", t.Universe, addr)
 	}
 
 	// Parse broadcast addresses
@@ -88,7 +88,7 @@ func main() {
 		}
 		for _, addr := range broadcasts {
 			pollTargets[addr.String()] = addr
-			log.Printf("  broadcast %s", addr)
+			log.Printf("[config]   broadcast %s", addr)
 		}
 	}
 
@@ -140,7 +140,7 @@ func main() {
 		}
 		app.artReceiver = artReceiver
 		artReceiver.Start()
-		log.Printf("artnet listening addr=%s", addr)
+		log.Printf("[artnet] listening addr=%s", addr)
 	}
 
 	// Create sACN receiver if needed
@@ -158,7 +158,7 @@ func main() {
 			}
 			app.sacnPcapReceiver = pcapReceiver
 			pcapReceiver.Start()
-			log.Printf("sacn pcap listening iface=%s universes=%v", iface, sacnUniverses)
+			log.Printf("[sacn] pcap listening iface=%s universes=%v", iface, sacnUniverses)
 		} else {
 			// Use standard UDP receiver
 			sacnReceiver, err := sacn.NewReceiver(sacnUniverses, app.HandleSACN)
@@ -167,7 +167,7 @@ func main() {
 			}
 			app.sacnReceiver = sacnReceiver
 			sacnReceiver.Start()
-			log.Printf("sacn listening universes=%v", sacnUniverses)
+			log.Printf("[sacn] listening universes=%v", sacnUniverses)
 		}
 	}
 
@@ -179,7 +179,7 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
-	log.Println("shutting down")
+	log.Println("[main] shutting down")
 	if app.artReceiver != nil {
 		app.artReceiver.Stop()
 	}
