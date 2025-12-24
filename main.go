@@ -27,12 +27,14 @@ type App struct {
 	discovery        *artnet.Discovery
 	engine           *remap.Engine
 	targets          map[artnet.Universe]*net.UDPAddr
+	broadcasts       []*net.UDPAddr
 	debug            bool
 }
 
 func main() {
 	configPath := flag.String("config", "config.toml", "path to config file")
 	artnetListen := flag.String("artnet-listen", ":6454", "artnet listen address (empty to disable)")
+	artnetBroadcast := flag.String("artnet-broadcast", "", "artnet broadcast addresses (comma-separated, or 'auto')")
 	sacnPcap := flag.String("sacn-pcap", "", "use pcap for sacn on interface (e.g. en0, eth0)")
 	debug := flag.Bool("debug", false, "log incoming/outgoing dmx packets")
 	flag.Parse()
@@ -69,6 +71,27 @@ func main() {
 		log.Printf("  target %s -> %s", t.Universe, addr)
 	}
 
+	// Parse broadcast addresses
+	var broadcasts []*net.UDPAddr
+	if *artnetBroadcast != "" {
+		if *artnetBroadcast == "auto" {
+			broadcasts = detectBroadcastAddrs()
+		} else {
+			for _, addrStr := range strings.Split(*artnetBroadcast, ",") {
+				addrStr = strings.TrimSpace(addrStr)
+				addr, err := parseTargetAddr(addrStr)
+				if err != nil {
+					log.Fatalf("broadcast error: address=%q err=%v", addrStr, err)
+				}
+				broadcasts = append(broadcasts, addr)
+			}
+		}
+		for _, addr := range broadcasts {
+			pollTargets[addr.String()] = addr
+			log.Printf("  broadcast %s", addr)
+		}
+	}
+
 	// Convert poll targets to slice
 	pollTargetSlice := make([]*net.UDPAddr, 0, len(pollTargets))
 	for _, addr := range pollTargets {
@@ -101,6 +124,7 @@ func main() {
 		discovery:  discovery,
 		engine:     engine,
 		targets:    targets,
+		broadcasts: broadcasts,
 		debug:      *debug,
 	}
 
@@ -237,6 +261,15 @@ func (a *App) sendOutputs(outputs []remap.Output) {
 				if err := a.artSender.SendDMX(target, out.Universe, out.Data[:]); err != nil {
 					log.Printf("[->artnet] error: dst=%s err=%v", target.IP, err)
 				}
+			} else if len(a.broadcasts) > 0 {
+				for _, bcast := range a.broadcasts {
+					if a.debug {
+						log.Printf("[->artnet] broadcast dst=%s universe=%s", bcast.IP, out.Universe)
+					}
+					if err := a.artSender.SendDMX(bcast, out.Universe, out.Data[:]); err != nil {
+						log.Printf("[->artnet] error: dst=%s err=%v", bcast.IP, err)
+					}
+				}
 			} else {
 				log.Printf("[->artnet] no target: universe=%s", out.Universe)
 			}
@@ -318,4 +351,63 @@ func parseTargetAddr(s string) (*net.UDPAddr, error) {
 	}
 
 	return &net.UDPAddr{IP: ip, Port: port}, nil
+}
+
+// detectBroadcastAddrs returns broadcast addresses for all network interfaces
+func detectBroadcastAddrs() []*net.UDPAddr {
+	var addrs []*net.UDPAddr
+	seen := make(map[string]bool)
+
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+
+	for _, iface := range ifaces {
+		// Skip loopback and down interfaces
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+
+		ifaceAddrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range ifaceAddrs {
+			ipnet, ok := addr.(*net.IPNet)
+			if !ok {
+				continue
+			}
+
+			ip4 := ipnet.IP.To4()
+			if ip4 == nil {
+				continue
+			}
+
+			// Calculate broadcast address: IP | ~mask
+			mask := ipnet.Mask
+			if len(mask) != 4 {
+				continue
+			}
+
+			broadcast := make(net.IP, 4)
+			for i := 0; i < 4; i++ {
+				broadcast[i] = ip4[i] | ^mask[i]
+			}
+
+			key := broadcast.String()
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+
+			addrs = append(addrs, &net.UDPAddr{
+				IP:   broadcast,
+				Port: artnet.Port,
+			})
+		}
+	}
+
+	return addrs
 }
