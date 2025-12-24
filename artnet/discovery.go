@@ -153,7 +153,6 @@ func (d *Discovery) HandlePollReply(src *net.UDPAddr, pkt *PollReplyPacket) {
 			Port: pkt.Port, // Use port from packet, not UDP source port
 		}
 		d.nodes[ip] = node
-		log.Printf("[artnet] discovered ip=%s name=%s", ip, shortName)
 	}
 
 	node.ShortName = shortName
@@ -163,6 +162,7 @@ func (d *Discovery) HandlePollReply(src *net.UDPAddr, pkt *PollReplyPacket) {
 
 	// Accumulate universes from multiple ArtPollReply packets
 	// (multi-port devices send separate replies for each group of 4 ports)
+	prevLen := len(node.Universes)
 	for _, u := range universes {
 		found := false
 		for _, existing := range node.Universes {
@@ -174,6 +174,12 @@ func (d *Discovery) HandlePollReply(src *net.UDPAddr, pkt *PollReplyPacket) {
 		if !found {
 			node.Universes = append(node.Universes, u)
 		}
+	}
+
+	if !exists {
+		log.Printf("[artnet] discovered ip=%s name=%s universes=%v", ip, shortName, node.Universes)
+	} else if len(node.Universes) != prevLen {
+		log.Printf("[artnet] updated ip=%s name=%s universes=%v", ip, shortName, node.Universes)
 	}
 }
 
