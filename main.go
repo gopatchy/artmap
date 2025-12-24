@@ -358,9 +358,21 @@ func detectBroadcastAddrs() []*net.UDPAddr {
 	var addrs []*net.UDPAddr
 	seen := make(map[string]bool)
 
+	// Always include standard ArtNet broadcast addresses
+	// 255.255.255.255 - limited broadcast (may not work on all networks)
+	// 2.255.255.255 - classic ArtNet subnet broadcast
+	for _, ip := range []net.IP{
+		net.IPv4(255, 255, 255, 255),
+		net.IPv4(2, 255, 255, 255),
+	} {
+		key := ip.String()
+		seen[key] = true
+		addrs = append(addrs, &net.UDPAddr{IP: ip, Port: artnet.Port})
+	}
+
 	ifaces, err := net.Interfaces()
 	if err != nil {
-		return nil
+		return addrs
 	}
 
 	for _, iface := range ifaces {
