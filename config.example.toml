@@ -5,9 +5,9 @@
 #   --artnet-listen=:6454        ArtNet listen address (empty to disable)
 #   --artnet-broadcast=auto      Broadcast addresses (comma-separated, or 'auto')
 
-# Target addresses for ArtNet output universes
-# Each output universe needs a target IP (broadcast or unicast)
-# ArtPoll discovery will be sent to all unique target addresses
+# Target addresses for output universes
+# ArtNet: target IP (broadcast or unicast), ArtPoll discovery sent to all
+# sACN: unicast targets sent in addition to multicast
 [[target]]
 universe = "artnet:0.0.0"
 address = "2.255.255.255"
@@ -15,6 +15,10 @@ address = "2.255.255.255"
 [[target]]
 universe = "artnet:0.0.5"
 address = "10.50.255.255"
+
+[[target]]
+universe = "sacn:1"
+address = "192.168.1.100"
 
 # Address format:
 #   proto:universe[:channels]

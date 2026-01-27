@@ -25,7 +25,8 @@ type App struct {
 	sacnSender   *sacn.Sender
 	discovery    *artnet.Discovery
 	engine       *remap.Engine
-	targets      map[artnet.Universe]*net.UDPAddr
+	artTargets   map[artnet.Universe]*net.UDPAddr
+	sacnTargets  map[uint16][]*net.UDPAddr
 	debug        bool
 }
 
@@ -53,19 +54,28 @@ func main() {
 	}
 
 	// Parse targets
-	targets := make(map[artnet.Universe]*net.UDPAddr)
+	artTargets := make(map[artnet.Universe]*net.UDPAddr)
+	sacnTargets := make(map[uint16][]*net.UDPAddr)
 	pollTargets := make(map[string]*net.UDPAddr) // dedupe by address string
 	for _, t := range cfg.Targets {
-		if t.Universe.Protocol != config.ProtocolArtNet {
-			continue // only artnet targets need addresses
+		switch t.Universe.Protocol {
+		case config.ProtocolArtNet:
+			addr, err := parseTargetAddr(t.Address, artnet.Port)
+			if err != nil {
+				log.Fatalf("target error: address=%q err=%v", t.Address, err)
+			}
+			artTargets[t.Universe.Universe] = addr
+			pollTargets[addr.String()] = addr
+			log.Printf("[config]   target %s -> %s", t.Universe, addr)
+		case config.ProtocolSACN:
+			addr, err := parseTargetAddr(t.Address, sacn.Port)
+			if err != nil {
+				log.Fatalf("target error: address=%q err=%v", t.Address, err)
+			}
+			u := uint16(t.Universe.Universe)
+			sacnTargets[u] = append(sacnTargets[u], addr)
+			log.Printf("[config]   target %s -> %s", t.Universe, addr)
 		}
-		addr, err := parseTargetAddr(t.Address)
-		if err != nil {
-			log.Fatalf("target error: address=%q err=%v", t.Address, err)
-		}
-		targets[t.Universe.Universe] = addr
-		pollTargets[addr.String()] = addr
-		log.Printf("[config]   target %s -> %s", t.Universe, addr)
 	}
 
 	// Parse broadcast addresses
@@ -76,7 +86,7 @@ func main() {
 		} else {
 			for _, addrStr := range strings.Split(*artnetBroadcast, ",") {
 				addrStr = strings.TrimSpace(addrStr)
-				addr, err := parseTargetAddr(addrStr)
+				addr, err := parseTargetAddr(addrStr, artnet.Port)
 				if err != nil {
 					log.Fatalf("broadcast error: address=%q err=%v", addrStr, err)
 				}
@@ -115,13 +125,14 @@ func main() {
 
 	// Create app
 	app := &App{
-		cfg:        cfg,
-		artSender:  artSender,
-		sacnSender: sacnSender,
-		discovery:  discovery,
-		engine:     engine,
-		targets:    targets,
-		debug:      *debug,
+		cfg:         cfg,
+		artSender:   artSender,
+		sacnSender:  sacnSender,
+		discovery:   discovery,
+		engine:      engine,
+		artTargets:  artTargets,
+		sacnTargets: sacnTargets,
+		debug:       *debug,
 	}
 
 	// Create ArtNet receiver if enabled
@@ -208,16 +219,24 @@ func (a *App) sendOutputs(outputs []remap.Output) {
 	for _, out := range outputs {
 		switch out.Protocol {
 		case config.ProtocolSACN:
+			u := uint16(out.Universe)
 			if a.debug {
-				log.Printf("[->sacn] universe=%d", uint16(out.Universe))
+				log.Printf("[->sacn] universe=%d", u)
 			}
-			if err := a.sacnSender.SendDMX(uint16(out.Universe), out.Data[:]); err != nil {
-				log.Printf("[->sacn] error: universe=%d err=%v", uint16(out.Universe), err)
+			if err := a.sacnSender.SendDMX(u, out.Data[:]); err != nil {
+				log.Printf("[->sacn] error: universe=%d err=%v", u, err)
+			}
+			for _, target := range a.sacnTargets[u] {
+				if a.debug {
+					log.Printf("[->sacn] unicast dst=%s universe=%d", target.IP, u)
+				}
+				if err := a.sacnSender.SendDMXUnicast(target, u, out.Data[:]); err != nil {
+					log.Printf("[->sacn] error: dst=%s err=%v", target.IP, err)
+				}
 			}
 
 		default: // ArtNet
-			// Configured target takes priority over discovery
-			if target, ok := a.targets[out.Universe]; ok {
+			if target, ok := a.artTargets[out.Universe]; ok {
 				if a.debug {
 					log.Printf("[->artnet] dst=%s universe=%s", target.IP, out.Universe)
 				}
@@ -288,8 +307,8 @@ func parseListenAddr(s string) (*net.UDPAddr, error) {
 
 // parseTargetAddr parses target address formats:
 // - "host:port" -> specific host and port
-// - "host" -> specific host, default ArtNet port
-func parseTargetAddr(s string) (*net.UDPAddr, error) {
+// - "host" -> specific host, default port
+func parseTargetAddr(s string, defaultPort int) (*net.UDPAddr, error) {
 	var host string
 	var port int
 
@@ -305,7 +324,7 @@ func parseTargetAddr(s string) (*net.UDPAddr, error) {
 		}
 	} else {
 		host = s
-		port = artnet.Port
+		port = defaultPort
 	}
 
 	ip := net.ParseIP(host)
