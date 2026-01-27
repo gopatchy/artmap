@@ -56,8 +56,8 @@ func (s *Sender) SendPoll(addr *net.UDPAddr) error {
 }
 
 // SendPollReply sends an ArtPollReply to a specific address
-func (s *Sender) SendPollReply(addr *net.UDPAddr, localIP [4]byte, shortName, longName string, universes []Universe) error {
-	pkt := BuildPollReplyPacket(localIP, shortName, longName, universes)
+func (s *Sender) SendPollReply(addr *net.UDPAddr, localIP [4]byte, shortName, longName string, universes []Universe, isInput bool) error {
+	pkt := BuildPollReplyPacket(localIP, shortName, longName, universes, isInput)
 	_, err := s.conn.WriteToUDP(pkt, addr)
 	return err
 }

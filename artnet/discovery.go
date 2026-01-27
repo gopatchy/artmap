@@ -20,25 +20,27 @@ type Node struct {
 
 // Discovery handles ArtNet node discovery
 type Discovery struct {
-	sender      *Sender
-	nodes       map[string]*Node // keyed by IP string
-	nodesMu     sync.RWMutex
-	localIP     [4]byte
-	shortName   string
-	longName    string
-	universes   []Universe
-	pollTargets []*net.UDPAddr
-	done        chan struct{}
+	sender       *Sender
+	nodes        map[string]*Node // keyed by IP string
+	nodesMu      sync.RWMutex
+	localIP      [4]byte
+	shortName    string
+	longName     string
+	inputUnivs   []Universe // universes we transmit TO (SwIn)
+	outputUnivs  []Universe // universes we receive FROM (SwOut)
+	pollTargets  []*net.UDPAddr
+	done         chan struct{}
 }
 
 // NewDiscovery creates a new discovery handler
-func NewDiscovery(sender *Sender, shortName, longName string, universes []Universe, pollTargets []*net.UDPAddr) *Discovery {
+func NewDiscovery(sender *Sender, shortName, longName string, inputUnivs, outputUnivs []Universe, pollTargets []*net.UDPAddr) *Discovery {
 	return &Discovery{
 		sender:      sender,
 		nodes:       make(map[string]*Node),
 		shortName:   shortName,
 		longName:    longName,
-		universes:   universes,
+		inputUnivs:  inputUnivs,
+		outputUnivs: outputUnivs,
 		pollTargets: pollTargets,
 		done:        make(chan struct{}),
 	}
@@ -185,10 +187,29 @@ func (d *Discovery) HandlePollReply(src *net.UDPAddr, pkt *PollReplyPacket) {
 
 // HandlePoll processes an incoming ArtPoll and responds
 func (d *Discovery) HandlePoll(src *net.UDPAddr) {
-	// Respond with our info
-	err := d.sender.SendPollReply(src, d.localIP, d.shortName, d.longName, d.universes)
-	if err != nil {
-		log.Printf("[->artnet] pollreply error: dst=%s err=%v", src.IP, err)
+	d.sendPollReplies(src, d.inputUnivs, true)
+	d.sendPollReplies(src, d.outputUnivs, false)
+}
+
+func (d *Discovery) sendPollReplies(dst *net.UDPAddr, universes []Universe, isInput bool) {
+	groups := make(map[uint16][]Universe)
+	for _, u := range universes {
+		key := uint16(u.Net())<<8 | uint16(u.SubNet())<<4
+		groups[key] = append(groups[key], u)
+	}
+
+	for _, univs := range groups {
+		for i := 0; i < len(univs); i += 4 {
+			end := i + 4
+			if end > len(univs) {
+				end = len(univs)
+			}
+			chunk := univs[i:end]
+			err := d.sender.SendPollReply(dst, d.localIP, d.shortName, d.longName, chunk, isInput)
+			if err != nil {
+				log.Printf("[->artnet] pollreply error: dst=%s err=%v", dst.IP, err)
+			}
+		}
 	}
 }
 

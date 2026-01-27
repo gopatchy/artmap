@@ -115,11 +115,16 @@ func main() {
 
 	// Create discovery
 	destNums := engine.DestArtNetUniverses()
-	destUniverses := make([]artnet.Universe, len(destNums))
+	inputUnivs := make([]artnet.Universe, len(destNums))
 	for i, n := range destNums {
-		destUniverses[i] = artnet.Universe(n)
+		inputUnivs[i] = artnet.Universe(n)
 	}
-	discovery := artnet.NewDiscovery(artSender, "artmap", "ArtNet Remapping Proxy", destUniverses, pollTargetSlice)
+	srcNums := engine.SourceArtNetUniverses()
+	outputUnivs := make([]artnet.Universe, len(srcNums))
+	for i, n := range srcNums {
+		outputUnivs[i] = artnet.Universe(n)
+	}
+	discovery := artnet.NewDiscovery(artSender, "artmap", "artmap", inputUnivs, outputUnivs, pollTargetSlice)
 
 	// Create app
 	app := &App{

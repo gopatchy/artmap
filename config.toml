@@ -2,6 +2,10 @@
 from = "artnet:32.0.0"
 to = "sacn:32"
 
+[[mapping]]
+from = "artnet:34.0.0"
+to = "sacn:34"
+
 # lighting-1 port 1
 [[target]]
 universe = "artnet:0.0.0"

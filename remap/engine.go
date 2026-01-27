@@ -77,6 +77,21 @@ func (e *Engine) Remap(src config.Universe, srcData [512]byte) []Output {
 	return result
 }
 
+// SourceArtNetUniverses returns source ArtNet universe numbers (for discovery)
+func (e *Engine) SourceArtNetUniverses() []uint16 {
+	seen := make(map[uint16]bool)
+	for _, m := range e.mappings {
+		if m.From.Protocol == config.ProtocolArtNet {
+			seen[m.From.Number] = true
+		}
+	}
+	result := make([]uint16, 0, len(seen))
+	for u := range seen {
+		result = append(result, u)
+	}
+	return result
+}
+
 // DestArtNetUniverses returns destination ArtNet universe numbers (for discovery)
 func (e *Engine) DestArtNetUniverses() []uint16 {
 	seen := make(map[uint16]bool)
