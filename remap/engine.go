@@ -3,53 +3,34 @@ package remap
 import (
 	"sync"
 
-	"github.com/gopatchy/artmap/artnet"
 	"github.com/gopatchy/artmap/config"
 )
 
 // Output represents a remapped DMX output
 type Output struct {
-	Universe artnet.Universe
-	Protocol config.Protocol
+	Universe config.Universe
 	Data     [512]byte
-}
-
-// outputKey uniquely identifies an output destination
-type outputKey struct {
-	Universe artnet.Universe
-	Protocol config.Protocol
-}
-
-// sourceKey uniquely identifies an input source
-type sourceKey struct {
-	Universe artnet.Universe
-	Protocol config.Protocol
 }
 
 // Engine handles DMX channel remapping
 type Engine struct {
 	mappings []config.NormalizedMapping
-	// Index mappings by source universe and protocol for faster lookup
-	bySource map[sourceKey][]config.NormalizedMapping
-	// Persistent state for each output universe (merged from all sources)
-	state   map[outputKey]*[512]byte
-	stateMu sync.Mutex
+	bySource map[config.Universe][]config.NormalizedMapping
+	state    map[config.Universe]*[512]byte
+	stateMu  sync.Mutex
 }
 
 // NewEngine creates a new remapping engine
 func NewEngine(mappings []config.NormalizedMapping) *Engine {
-	bySource := make(map[sourceKey][]config.NormalizedMapping)
+	bySource := make(map[config.Universe][]config.NormalizedMapping)
 	for _, m := range mappings {
-		key := sourceKey{Universe: m.FromUniverse, Protocol: m.FromProto}
-		bySource[key] = append(bySource[key], m)
+		bySource[m.From] = append(bySource[m.From], m)
 	}
 
-	// Initialize state for all output universes
-	state := make(map[outputKey]*[512]byte)
+	state := make(map[config.Universe]*[512]byte)
 	for _, m := range mappings {
-		key := outputKey{Universe: m.ToUniverse, Protocol: m.Protocol}
-		if _, ok := state[key]; !ok {
-			state[key] = &[512]byte{}
+		if _, ok := state[m.To]; !ok {
+			state[m.To] = &[512]byte{}
 		}
 	}
 
@@ -61,9 +42,8 @@ func NewEngine(mappings []config.NormalizedMapping) *Engine {
 }
 
 // Remap applies mappings to incoming DMX data and returns outputs
-func (e *Engine) Remap(srcProto config.Protocol, srcUniverse artnet.Universe, srcData [512]byte) []Output {
-	key := sourceKey{Universe: srcUniverse, Protocol: srcProto}
-	mappings, ok := e.bySource[key]
+func (e *Engine) Remap(src config.Universe, srcData [512]byte) []Output {
+	mappings, ok := e.bySource[src]
 	if !ok {
 		return nil
 	}
@@ -71,62 +51,41 @@ func (e *Engine) Remap(srcProto config.Protocol, srcUniverse artnet.Universe, sr
 	e.stateMu.Lock()
 	defer e.stateMu.Unlock()
 
-	// Track which outputs are affected by this input
-	affected := make(map[outputKey]bool)
+	affected := make(map[config.Universe]bool)
 
 	for _, m := range mappings {
-		outKey := outputKey{Universe: m.ToUniverse, Protocol: m.Protocol}
-		affected[outKey] = true
+		affected[m.To] = true
+		outState := e.state[m.To]
 
-		// Update state for this output
-		outState := e.state[outKey]
-
-		// Copy channels into persistent state
 		for i := 0; i < m.Count; i++ {
-			srcChan := m.FromChannel + i
-			dstChan := m.ToChannel + i
+			srcChan := m.FromChan + i
+			dstChan := m.ToChan + i
 			if srcChan < 512 && dstChan < 512 {
 				outState[dstChan] = srcData[srcChan]
 			}
 		}
 	}
 
-	// Return outputs for all affected universes
 	result := make([]Output, 0, len(affected))
-	for outKey := range affected {
+	for u := range affected {
 		result = append(result, Output{
-			Universe: outKey.Universe,
-			Protocol: outKey.Protocol,
-			Data:     *e.state[outKey],
+			Universe: u,
+			Data:     *e.state[u],
 		})
 	}
 
 	return result
 }
 
-// SourceUniverses returns all universes that have mappings
-func (e *Engine) SourceUniverses() []artnet.Universe {
-	seen := make(map[artnet.Universe]bool)
-	for key := range e.bySource {
-		seen[key.Universe] = true
-	}
-	result := make([]artnet.Universe, 0, len(seen))
-	for u := range seen {
-		result = append(result, u)
-	}
-	return result
-}
-
-// DestUniverses returns all destination universes (for ArtNet discovery)
-func (e *Engine) DestUniverses() []artnet.Universe {
-	seen := make(map[artnet.Universe]bool)
+// DestArtNetUniverses returns destination ArtNet universe numbers (for discovery)
+func (e *Engine) DestArtNetUniverses() []uint16 {
+	seen := make(map[uint16]bool)
 	for _, m := range e.mappings {
-		if m.Protocol == config.ProtocolArtNet {
-			seen[m.ToUniverse] = true
+		if m.To.Protocol == config.ProtocolArtNet {
+			seen[m.To.Number] = true
 		}
 	}
-
-	result := make([]artnet.Universe, 0, len(seen))
+	result := make([]uint16, 0, len(seen))
 	for u := range seen {
 		result = append(result, u)
 	}

@@ -25,7 +25,7 @@ type App struct {
 	sacnSender   *sacn.Sender
 	discovery    *artnet.Discovery
 	engine       *remap.Engine
-	artTargets   map[artnet.Universe]*net.UDPAddr
+	artTargets   map[uint16]*net.UDPAddr
 	sacnTargets  map[uint16][]*net.UDPAddr
 	debug        bool
 }
@@ -54,28 +54,22 @@ func main() {
 	}
 
 	// Parse targets
-	artTargets := make(map[artnet.Universe]*net.UDPAddr)
+	artTargets := make(map[uint16]*net.UDPAddr)
 	sacnTargets := make(map[uint16][]*net.UDPAddr)
-	pollTargets := make(map[string]*net.UDPAddr) // dedupe by address string
+	pollTargets := make(map[string]*net.UDPAddr)
 	for _, t := range cfg.Targets {
+		addr, err := parseTargetAddr(t.Address, protocolPort(t.Universe.Protocol))
+		if err != nil {
+			log.Fatalf("target error: address=%q err=%v", t.Address, err)
+		}
 		switch t.Universe.Protocol {
 		case config.ProtocolArtNet:
-			addr, err := parseTargetAddr(t.Address, artnet.Port)
-			if err != nil {
-				log.Fatalf("target error: address=%q err=%v", t.Address, err)
-			}
-			artTargets[t.Universe.Universe] = addr
+			artTargets[t.Universe.Number] = addr
 			pollTargets[addr.String()] = addr
-			log.Printf("[config]   target %s -> %s", t.Universe, addr)
 		case config.ProtocolSACN:
-			addr, err := parseTargetAddr(t.Address, sacn.Port)
-			if err != nil {
-				log.Fatalf("target error: address=%q err=%v", t.Address, err)
-			}
-			u := uint16(t.Universe.Universe)
-			sacnTargets[u] = append(sacnTargets[u], addr)
-			log.Printf("[config]   target %s -> %s", t.Universe, addr)
+			sacnTargets[t.Universe.Number] = append(sacnTargets[t.Universe.Number], addr)
 		}
+		log.Printf("[config]   target %s -> %s", t.Universe, addr)
 	}
 
 	// Parse broadcast addresses
@@ -120,7 +114,11 @@ func main() {
 	defer sacnSender.Close()
 
 	// Create discovery
-	destUniverses := engine.DestUniverses()
+	destNums := engine.DestArtNetUniverses()
+	destUniverses := make([]artnet.Universe, len(destNums))
+	for i, n := range destNums {
+		destUniverses[i] = artnet.Universe(n)
+	}
 	discovery := artnet.NewDiscovery(artSender, "artmap", "ArtNet Remapping Proxy", destUniverses, pollTargetSlice)
 
 	// Create app
@@ -186,8 +184,8 @@ func (a *App) HandleDMX(src *net.UDPAddr, pkt *artnet.DMXPacket) {
 		log.Printf("[<-artnet] src=%s universe=%s seq=%d len=%d",
 			src.IP, pkt.Universe, pkt.Sequence, pkt.Length)
 	}
-
-	a.sendOutputs(a.engine.Remap(config.ProtocolArtNet, pkt.Universe, pkt.Data))
+	u := config.Universe{Protocol: config.ProtocolArtNet, Number: uint16(pkt.Universe)}
+	a.sendOutputs(a.engine.Remap(u, pkt.Data))
 }
 
 // HandlePoll implements artnet.PacketHandler
@@ -211,15 +209,15 @@ func (a *App) HandleSACN(universe uint16, data [512]byte) {
 	if a.debug {
 		log.Printf("[<-sacn] universe=%d", universe)
 	}
-
-	a.sendOutputs(a.engine.Remap(config.ProtocolSACN, artnet.Universe(universe), data))
+	u := config.Universe{Protocol: config.ProtocolSACN, Number: universe}
+	a.sendOutputs(a.engine.Remap(u, data))
 }
 
 func (a *App) sendOutputs(outputs []remap.Output) {
 	for _, out := range outputs {
-		switch out.Protocol {
+		switch out.Universe.Protocol {
 		case config.ProtocolSACN:
-			u := uint16(out.Universe)
+			u := out.Universe.Number
 			if a.debug {
 				log.Printf("[->sacn] universe=%d", u)
 			}
@@ -235,15 +233,17 @@ func (a *App) sendOutputs(outputs []remap.Output) {
 				}
 			}
 
-		default: // ArtNet
-			if target, ok := a.artTargets[out.Universe]; ok {
+		case config.ProtocolArtNet:
+			u := out.Universe.Number
+			artU := artnet.Universe(u)
+			if target, ok := a.artTargets[u]; ok {
 				if a.debug {
 					log.Printf("[->artnet] dst=%s universe=%s", target.IP, out.Universe)
 				}
-				if err := a.artSender.SendDMX(target, out.Universe, out.Data[:]); err != nil {
+				if err := a.artSender.SendDMX(target, artU, out.Data[:]); err != nil {
 					log.Printf("[->artnet] error: dst=%s err=%v", target.IP, err)
 				}
-			} else if nodes := a.discovery.GetNodesForUniverse(out.Universe); len(nodes) > 0 {
+			} else if nodes := a.discovery.GetNodesForUniverse(artU); len(nodes) > 0 {
 				for _, node := range nodes {
 					addr := &net.UDPAddr{
 						IP:   node.IP,
@@ -252,7 +252,7 @@ func (a *App) sendOutputs(outputs []remap.Output) {
 					if a.debug {
 						log.Printf("[->artnet] dst=%s universe=%s", node.IP, out.Universe)
 					}
-					if err := a.artSender.SendDMX(addr, out.Universe, out.Data[:]); err != nil {
+					if err := a.artSender.SendDMX(addr, artU, out.Data[:]); err != nil {
 						log.Printf("[->artnet] error: dst=%s err=%v", node.IP, err)
 					}
 				}
@@ -305,9 +305,13 @@ func parseListenAddr(s string) (*net.UDPAddr, error) {
 	return &net.UDPAddr{IP: ip, Port: port}, nil
 }
 
-// parseTargetAddr parses target address formats:
-// - "host:port" -> specific host and port
-// - "host" -> specific host, default port
+func protocolPort(p config.Protocol) int {
+	if p == config.ProtocolSACN {
+		return sacn.Port
+	}
+	return artnet.Port
+}
+
 func parseTargetAddr(s string, defaultPort int) (*net.UDPAddr, error) {
 	var host string
 	var port int
