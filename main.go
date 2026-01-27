@@ -18,26 +18,22 @@ import (
 )
 
 type App struct {
-	cfg              *config.Config
-	artReceiver      *artnet.Receiver
-	artPcapReceiver  *artnet.PcapReceiver
-	sacnReceiver     *sacn.Receiver
-	sacnPcapReceiver *sacn.PcapReceiver
-	artSender        *artnet.Sender
-	sacnSender       *sacn.Sender
-	discovery        *artnet.Discovery
-	engine           *remap.Engine
-	targets          map[artnet.Universe]*net.UDPAddr
-	broadcasts       []*net.UDPAddr
-	debug            bool
+	cfg          *config.Config
+	artReceiver  *artnet.Receiver
+	sacnReceiver *sacn.Receiver
+	artSender    *artnet.Sender
+	sacnSender   *sacn.Sender
+	discovery    *artnet.Discovery
+	engine       *remap.Engine
+	targets      map[artnet.Universe]*net.UDPAddr
+	broadcasts   []*net.UDPAddr
+	debug        bool
 }
 
 func main() {
 	configPath := flag.String("config", "config.toml", "path to config file")
 	artnetListen := flag.String("artnet-listen", ":6454", "artnet listen address (empty to disable)")
-	artnetPcap := flag.String("artnet-pcap", "", "use pcap for artnet on interface (e.g. en0, any)")
 	artnetBroadcast := flag.String("artnet-broadcast", "auto", "artnet broadcast addresses (comma-separated, or 'auto')")
-	sacnPcap := flag.String("sacn-pcap", "", "use pcap for sacn on interface (e.g. en0, any)")
 	debug := flag.Bool("debug", false, "log incoming/outgoing dmx packets")
 	flag.Parse()
 
@@ -131,20 +127,7 @@ func main() {
 	}
 
 	// Create ArtNet receiver if enabled
-	if *artnetPcap != "" {
-		// Use pcap-based receiver (requires root, avoids port conflicts)
-		iface := *artnetPcap
-		if iface == "auto" {
-			iface = "any"
-		}
-		pcapReceiver, err := artnet.NewPcapReceiver(iface, app)
-		if err != nil {
-			log.Fatalf("artnet pcap error: %v", err)
-		}
-		app.artPcapReceiver = pcapReceiver
-		pcapReceiver.Start()
-		log.Printf("[artnet] pcap listening iface=%s", iface)
-	} else if *artnetListen != "" {
+	if *artnetListen != "" {
 		addr, err := parseListenAddr(*artnetListen)
 		if err != nil {
 			log.Fatalf("artnet listen error: %v", err)
@@ -161,29 +144,13 @@ func main() {
 	// Create sACN receiver if needed
 	sacnUniverses := cfg.SACNSourceUniverses()
 	if len(sacnUniverses) > 0 {
-		if *sacnPcap != "" {
-			// Use pcap-based receiver (requires root, avoids port conflicts)
-			iface := *sacnPcap
-			if iface == "auto" {
-				iface = sacn.DefaultInterface()
-			}
-			pcapReceiver, err := sacn.NewPcapReceiver(iface, sacnUniverses, app.HandleSACN)
-			if err != nil {
-				log.Fatalf("sacn pcap error: %v", err)
-			}
-			app.sacnPcapReceiver = pcapReceiver
-			pcapReceiver.Start()
-			log.Printf("[sacn] pcap listening iface=%s universes=%v", iface, sacnUniverses)
-		} else {
-			// Use standard UDP receiver
-			sacnReceiver, err := sacn.NewReceiver(sacnUniverses, app.HandleSACN)
-			if err != nil {
-				log.Fatalf("sacn receiver error: %v", err)
-			}
-			app.sacnReceiver = sacnReceiver
-			sacnReceiver.Start()
-			log.Printf("[sacn] listening universes=%v", sacnUniverses)
+		sacnReceiver, err := sacn.NewReceiver(sacnUniverses, app.HandleSACN)
+		if err != nil {
+			log.Fatalf("sacn receiver error: %v", err)
 		}
+		app.sacnReceiver = sacnReceiver
+		sacnReceiver.Start()
+		log.Printf("[sacn] listening universes=%v", sacnUniverses)
 	}
 
 	// Start discovery
@@ -198,14 +165,8 @@ func main() {
 	if app.artReceiver != nil {
 		app.artReceiver.Stop()
 	}
-	if app.artPcapReceiver != nil {
-		app.artPcapReceiver.Stop()
-	}
 	if app.sacnReceiver != nil {
 		app.sacnReceiver.Stop()
-	}
-	if app.sacnPcapReceiver != nil {
-		app.sacnPcapReceiver.Stop()
 	}
 	discovery.Stop()
 }

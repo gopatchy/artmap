@@ -3,9 +3,7 @@
 #
 # Flags:
 #   --artnet-listen=:6454        ArtNet listen address (empty to disable)
-#   --artnet-pcap=any            Use pcap for ArtNet (requires root, avoids port conflicts)
 #   --artnet-broadcast=auto      Broadcast addresses (comma-separated, or 'auto')
-#   --sacn-pcap=any              Use pcap for sACN (requires root, avoids port conflicts)
 
 # Target addresses for ArtNet output universes
 # Each output universe needs a target IP (broadcast or unicast)
