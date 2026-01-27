@@ -26,7 +26,6 @@ type App struct {
 	discovery    *artnet.Discovery
 	engine       *remap.Engine
 	targets      map[artnet.Universe]*net.UDPAddr
-	broadcasts   []*net.UDPAddr
 	debug        bool
 }
 
@@ -122,7 +121,6 @@ func main() {
 		discovery:  discovery,
 		engine:     engine,
 		targets:    targets,
-		broadcasts: broadcasts,
 		debug:      *debug,
 	}
 
@@ -239,17 +237,6 @@ func (a *App) sendOutputs(outputs []remap.Output) {
 						log.Printf("[->artnet] error: dst=%s err=%v", node.IP, err)
 					}
 				}
-			} else if len(a.broadcasts) > 0 {
-				for _, bcast := range a.broadcasts {
-					if a.debug {
-						log.Printf("[->artnet] broadcast dst=%s universe=%s", bcast.IP, out.Universe)
-					}
-					if err := a.artSender.SendDMX(bcast, out.Universe, out.Data[:]); err != nil {
-						log.Printf("[->artnet] error: dst=%s err=%v", bcast.IP, err)
-					}
-				}
-			} else {
-				log.Printf("[->artnet] no target: universe=%s", out.Universe)
 			}
 		}
 	}
