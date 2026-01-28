@@ -188,6 +188,9 @@ func parseChannelRange(spec string, start, end *int) error {
 		*start = ch
 		*end = ch
 	}
+	if *start > *end {
+		return fmt.Errorf("channel start %d > end %d", *start, *end)
+	}
 	return nil
 }
 
