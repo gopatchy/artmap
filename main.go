@@ -11,7 +11,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/gopatchy/artmap/artnet"
+	"github.com/gopatchy/artnet"
 	"github.com/gopatchy/artmap/config"
 	"github.com/gopatchy/artmap/remap"
 	"github.com/gopatchy/artmap/sacn"
