@@ -96,3 +96,9 @@ func (r *Receiver) handlePacket(src *net.UDPAddr, data []byte) {
 func (r *Receiver) LocalAddr() net.Addr {
 	return r.conn.LocalAddr()
 }
+
+// SendTo sends a raw packet through the receiver's socket (port 6454)
+func (r *Receiver) SendTo(data []byte, addr *net.UDPAddr) error {
+	_, err := r.conn.WriteToUDP(data, addr)
+	return err
+}

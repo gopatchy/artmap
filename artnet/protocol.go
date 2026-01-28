@@ -255,8 +255,8 @@ func BuildPollPacket() []byte {
 
 // BuildPollReplyPacket creates an ArtPollReply packet
 // isInput: true = we transmit to network (SwIn), false = we receive from network (SwOut)
-func BuildPollReplyPacket(ip [4]byte, shortName, longName string, universes []Universe, isInput bool) []byte {
-	buf := make([]byte, 239)
+func BuildPollReplyPacket(ip [4]byte, mac [6]byte, shortName, longName string, universes []Universe, isInput bool) []byte {
+	buf := make([]byte, 240)
 
 	copy(buf[0:8], ArtNetID[:])
 	binary.LittleEndian.PutUint16(buf[8:10], OpPollReply)
@@ -280,17 +280,20 @@ func BuildPollReplyPacket(ip [4]byte, shortName, longName string, universes []Un
 
 	for i := 0; i < numPorts; i++ {
 		if isInput {
-			buf[174+i] = 0x40 // Can input to Art-Net (we transmit)
-			buf[178+i] = 0x80 // Data received
+			buf[174+i] = 0x40
+			buf[178+i] = 0x80
 			buf[186+i] = universes[i].Universe()
 		} else {
-			buf[174+i] = 0x80 // Can output from Art-Net (we receive)
-			buf[182+i] = 0x80 // Data transmitted
+			buf[174+i] = 0x80
+			buf[182+i] = 0x80
 			buf[190+i] = universes[i].Universe()
 		}
 	}
 
-	buf[200] = 0x00 // StNode
+	copy(buf[201:207], mac[:])
+	copy(buf[207:211], ip[:])
+	buf[211] = 1
+	buf[212] = 0x08
 
 	return buf
 }

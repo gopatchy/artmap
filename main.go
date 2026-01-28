@@ -149,6 +149,7 @@ func main() {
 			log.Fatalf("artnet receiver error: %v", err)
 		}
 		app.artReceiver = artReceiver
+		discovery.SetReceiver(artReceiver)
 		artReceiver.Start()
 		log.Printf("[artnet] listening addr=%s", addr)
 	}

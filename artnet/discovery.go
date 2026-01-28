@@ -21,9 +21,12 @@ type Node struct {
 // Discovery handles ArtNet node discovery
 type Discovery struct {
 	sender       *Sender
+	receiver     *Receiver
 	nodes        map[string]*Node // keyed by IP string
 	nodesMu      sync.RWMutex
 	localIP      [4]byte
+	localMAC     [6]byte
+	broadcast    net.IP
 	shortName    string
 	longName     string
 	inputUnivs   []Universe // universes we transmit TO (SwIn)
@@ -48,10 +51,7 @@ func NewDiscovery(sender *Sender, shortName, longName string, inputUnivs, output
 
 // Start begins periodic discovery
 func (d *Discovery) Start() {
-	// Get local IP
-	d.localIP = d.getLocalIP()
-
-	// Start periodic poll
+	d.detectInterface()
 	go d.pollLoop()
 }
 
@@ -187,8 +187,9 @@ func (d *Discovery) HandlePollReply(src *net.UDPAddr, pkt *PollReplyPacket) {
 
 // HandlePoll processes an incoming ArtPoll and responds
 func (d *Discovery) HandlePoll(src *net.UDPAddr) {
-	d.sendPollReplies(src, d.inputUnivs, true)
-	d.sendPollReplies(src, d.outputUnivs, false)
+	dst := &net.UDPAddr{IP: d.broadcast, Port: Port}
+	d.sendPollReplies(dst, d.inputUnivs, true)
+	d.sendPollReplies(dst, d.outputUnivs, false)
 }
 
 func (d *Discovery) sendPollReplies(dst *net.UDPAddr, universes []Universe, isInput bool) {
@@ -205,7 +206,9 @@ func (d *Discovery) sendPollReplies(dst *net.UDPAddr, universes []Universe, isIn
 				end = len(univs)
 			}
 			chunk := univs[i:end]
-			err := d.sender.SendPollReply(dst, d.localIP, d.shortName, d.longName, chunk, isInput)
+
+			pkt := BuildPollReplyPacket(d.localIP, d.localMAC, d.shortName, d.longName, chunk, isInput)
+			err := d.receiver.SendTo(pkt, dst)
 			if err != nil {
 				log.Printf("[->artnet] pollreply error: dst=%s err=%v", dst.IP, err)
 			}
@@ -250,24 +253,50 @@ func (d *Discovery) GetAllNodes() []*Node {
 	return result
 }
 
-func (d *Discovery) getLocalIP() [4]byte {
-	var result [4]byte
+func (d *Discovery) detectInterface() {
+	d.broadcast = net.IPv4bcast
 
-	addrs, err := net.InterfaceAddrs()
+	ifaces, err := net.Interfaces()
 	if err != nil {
-		return result
+		return
 	}
 
-	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ip4 := ipnet.IP.To4(); ip4 != nil {
-				copy(result[:], ip4)
-				return result
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			ipnet, ok := addr.(*net.IPNet)
+			if !ok {
+				continue
 			}
+
+			ip4 := ipnet.IP.To4()
+			if ip4 == nil {
+				continue
+			}
+
+			copy(d.localIP[:], ip4)
+
+			if len(iface.HardwareAddr) == 6 {
+				copy(d.localMAC[:], iface.HardwareAddr)
+			}
+
+			bcast := make(net.IP, 4)
+			for i := 0; i < 4; i++ {
+				bcast[i] = ip4[i] | ^ipnet.Mask[i]
+			}
+			d.broadcast = bcast
+
+			return
 		}
 	}
-
-	return result
 }
 
 // SetLocalIP sets the local IP for PollReply responses
@@ -275,4 +304,9 @@ func (d *Discovery) SetLocalIP(ip net.IP) {
 	if ip4 := ip.To4(); ip4 != nil {
 		copy(d.localIP[:], ip4)
 	}
+}
+
+// SetReceiver sets the receiver for sending poll replies from port 6454
+func (d *Discovery) SetReceiver(r *Receiver) {
+	d.receiver = r
 }
