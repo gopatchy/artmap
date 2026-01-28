@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"net"
 	"sync"
+
+	"golang.org/x/net/ipv4"
 )
 
 // Sender sends sACN (E1.31) packets
@@ -16,13 +18,25 @@ type Sender struct {
 }
 
 // NewSender creates a new sACN sender
-func NewSender(sourceName string) (*Sender, error) {
+func NewSender(sourceName string, ifaceName string) (*Sender, error) {
 	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
 	if err != nil {
 		return nil, err
 	}
 
-	// Generate random CID
+	if ifaceName != "" {
+		iface, err := net.InterfaceByName(ifaceName)
+		if err != nil {
+			conn.Close()
+			return nil, err
+		}
+		p := ipv4.NewPacketConn(conn)
+		if err := p.SetMulticastInterface(iface); err != nil {
+			conn.Close()
+			return nil, err
+		}
+	}
+
 	var cid [16]byte
 	rand.Read(cid[:])
 

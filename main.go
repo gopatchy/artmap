@@ -34,6 +34,7 @@ func main() {
 	configPath := flag.String("config", "config.toml", "path to config file")
 	artnetListen := flag.String("artnet-listen", ":6454", "artnet listen address (empty to disable)")
 	artnetBroadcast := flag.String("artnet-broadcast", "auto", "artnet broadcast addresses (comma-separated, or 'auto')")
+	sacnInterface := flag.String("sacn-interface", "", "network interface for sACN multicast")
 	debug := flag.Bool("debug", false, "log incoming/outgoing dmx packets")
 	flag.Parse()
 
@@ -107,7 +108,7 @@ func main() {
 	defer artSender.Close()
 
 	// Create sACN sender
-	sacnSender, err := sacn.NewSender("artmap")
+	sacnSender, err := sacn.NewSender("artmap", *sacnInterface)
 	if err != nil {
 		log.Fatalf("sacn sender error: %v", err)
 	}
