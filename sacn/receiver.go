@@ -20,25 +20,28 @@ type Receiver struct {
 }
 
 // NewReceiver creates a new sACN receiver for the given universes
-func NewReceiver(universes []uint16, handler DMXHandler) (*Receiver, error) {
-	// Listen on sACN port
+func NewReceiver(universes []uint16, ifaceName string, handler DMXHandler) (*Receiver, error) {
 	c, err := net.ListenPacket("udp4", ":5568")
 	if err != nil {
 		return nil, err
 	}
 
+	var iface *net.Interface
+	if ifaceName != "" {
+		iface, err = net.InterfaceByName(ifaceName)
+		if err != nil {
+			c.Close()
+			return nil, err
+		}
+	}
+
 	p := ipv4.NewPacketConn(c)
 
-	// Join multicast groups for each universe
 	for _, u := range universes {
 		group := net.IPv4(239, 255, byte(u>>8), byte(u&0xff))
-		iface, _ := net.InterfaceByIndex(0) // Use default interface
 		if err := p.JoinGroup(iface, &net.UDPAddr{IP: group}); err != nil {
-			// Try joining on all interfaces
-			ifaces, _ := net.Interfaces()
-			for _, iface := range ifaces {
-				p.JoinGroup(&iface, &net.UDPAddr{IP: group})
-			}
+			c.Close()
+			return nil, err
 		}
 	}
 

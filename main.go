@@ -158,7 +158,7 @@ func main() {
 	// Create sACN receiver if needed
 	sacnUniverses := cfg.SACNSourceUniverses()
 	if len(sacnUniverses) > 0 {
-		sacnReceiver, err := sacn.NewReceiver(sacnUniverses, app.HandleSACN)
+		sacnReceiver, err := sacn.NewReceiver(sacnUniverses, *sacnInterface, app.HandleSACN)
 		if err != nil {
 			log.Fatalf("sacn receiver error: %v", err)
 		}
