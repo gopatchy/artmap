@@ -1,17 +1,19 @@
+# DMX148 port 1: wash1
 [[mapping]]
-from = "artnet:32.0.0"
-to = "sacn:32"
+from = "artnet:50.0.10"
+to = "sacn:148"
 
+# DMX148 port 2
 [[mapping]]
-from = "artnet:34.0.0"
-to = "sacn:34"
+from = "artnet:50.0.11"
+to = "sacn:150"
 
 # lighting-1 port 1
 [[target]]
-universe = "artnet:0.0.0"
+universe = "sacn:1"
 address = "10.50.1.64"
 [[target]]
-universe = "artnet:0.0.1"
+universe = "sacn:2"
 address = "10.50.1.64"
 
 # lighting-1 port 2
@@ -173,7 +175,7 @@ to = "artnet:0.0.14:1"
 # 2P1
 [[mapping]]
 from = "sacn:64:361-450"
-to = "artnet:0.0.0:1"
+to = "sacn:1:1"
 
 # 2P2
 [[mapping]]
