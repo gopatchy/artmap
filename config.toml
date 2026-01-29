@@ -1,12 +1,4 @@
-# DMX148 port 1: wash1
-[[mapping]]
-from = "artnet:50.0.10"
-to = "sacn:148"
-
-# DMX148 port 2
-[[mapping]]
-from = "artnet:50.0.11"
-to = "sacn:150"
+###### Pixie driver sACN unicast hacks
 
 # lighting-1 port 1
 [[target]]
@@ -15,235 +7,493 @@ address = "10.50.1.64"
 [[target]]
 universe = "sacn:2"
 address = "10.50.1.64"
+[[target]]
+universe = "sacn:3"
+address = "10.50.1.64"
+[[target]]
+universe = "sacn:4"
+address = "10.50.1.64"
+[[target]]
+universe = "sacn:5"
+address = "10.50.1.64"
+[[target]]
+universe = "sacn:6"
+address = "10.50.1.64"
+[[target]]
+universe = "sacn:7"
+address = "10.50.1.64"
+[[target]]
+universe = "sacn:8"
+address = "10.50.1.64"
 
 # lighting-1 port 2
 [[target]]
-universe = "artnet:0.0.8"
+universe = "sacn:9"
 address = "10.50.1.65"
 [[target]]
-universe = "artnet:0.0.9"
+universe = "sacn:10"
+address = "10.50.1.65"
+[[target]]
+universe = "sacn:11"
+address = "10.50.1.65"
+[[target]]
+universe = "sacn:12"
+address = "10.50.1.65"
+[[target]]
+universe = "sacn:13"
+address = "10.50.1.65"
+[[target]]
+universe = "sacn:14"
+address = "10.50.1.65"
+[[target]]
+universe = "sacn:15"
+address = "10.50.1.65"
+[[target]]
+universe = "sacn:16"
 address = "10.50.1.65"
 
 # lighting-2 port 1
 [[target]]
-universe = "artnet:0.0.2"
+universe = "sacn:65"
 address = "10.50.1.72"
 [[target]]
-universe = "artnet:0.0.3"
+universe = "sacn:66"
 address = "10.50.1.72"
 [[target]]
-universe = "artnet:0.0.4"
+universe = "sacn:67"
 address = "10.50.1.72"
 [[target]]
-universe = "artnet:0.0.5"
+universe = "sacn:68"
 address = "10.50.1.72"
 [[target]]
-universe = "artnet:0.0.6"
+universe = "sacn:69"
+address = "10.50.1.72"
+[[target]]
+universe = "sacn:70"
+address = "10.50.1.72"
+[[target]]
+universe = "sacn:71"
+address = "10.50.1.72"
+[[target]]
+universe = "sacn:72"
 address = "10.50.1.72"
 
 # lighting-2 port 2
 [[target]]
-universe = "artnet:0.0.10"
+universe = "sacn:73"
 address = "10.50.1.73"
 [[target]]
-universe = "artnet:0.0.11"
+universe = "sacn:74"
 address = "10.50.1.73"
 [[target]]
-universe = "artnet:0.0.12"
+universe = "sacn:75"
 address = "10.50.1.73"
 [[target]]
-universe = "artnet:0.0.13"
+universe = "sacn:76"
 address = "10.50.1.73"
 [[target]]
-universe = "artnet:0.0.14"
+universe = "sacn:77"
 address = "10.50.1.73"
+[[target]]
+universe = "sacn:78"
+address = "10.50.1.73"
+[[target]]
+universe = "sacn:79"
+address = "10.50.1.73"
+[[target]]
+universe = "sacn:80"
+address = "10.50.1.73"
+
+
+
+###### Qlab (artnet) -> ENTTEC (sacn) mappings
+
+# DMXA port 1: wash1
+[[mapping]]
+from = "artnet:50.0.0"
+to = "sacn:129"
+
+# DMXA port 2
+[[mapping]]
+from = "artnet:50.0.1"
+to = "sacn:131"
+
+# DMXB port 1: wash2
+[[mapping]]
+from = "artnet:50.0.2"
+to = "sacn:133"
+
+# DMXB port 2
+[[mapping]]
+from = "artnet:50.0.3"
+to = "sacn:135"
+
+# DMXC port 1: wash3
+[[mapping]]
+from = "artnet:50.0.4"
+to = "sacn:137"
+
+# DMXC port 2
+[[mapping]]
+from = "artnet:50.0.5"
+to = "sacn:139"
+
+# DMXD port 1: wash4
+[[mapping]]
+from = "artnet:50.0.6"
+to = "sacn:141"
+
+# DMXD port 2
+[[mapping]]
+from = "artnet:50.0.7"
+to = "sacn:143"
+
+# DMXE port 1: wash5
+[[mapping]]
+from = "artnet:50.0.8"
+to = "sacn:145"
+
+# DMXE port 2
+[[mapping]]
+from = "artnet:50.0.9"
+to = "sacn:147"
+
+# DMXF port 1: wash6
+[[mapping]]
+from = "artnet:50.0.10"
+to = "sacn:149"
+
+# DMXF port 2
+[[mapping]]
+from = "artnet:50.0.11"
+to = "sacn:151"
+
+# DMXG port 1: cyc1
+[[mapping]]
+from = "artnet:50.0.12"
+to = "sacn:153"
+
+# DMXG port 2
+[[mapping]]
+from = "artnet:50.0.13"
+to = "sacn:155"
+
+# DMXH port 1: cyc2
+[[mapping]]
+from = "artnet:50.0.14"
+to = "sacn:157"
+
+# DMXH port 2
+[[mapping]]
+from = "artnet:50.0.15"
+to = "sacn:159"
+
+# DMXI port 1: cyc3
+[[mapping]]
+from = "artnet:50.1.0"
+to = "sacn:161"
+
+# DMXI port 2
+[[mapping]]
+from = "artnet:50.1.1"
+to = "sacn:163"
+
+# DMXJ port 1: cyc4
+[[mapping]]
+from = "artnet:50.1.2"
+to = "sacn:165"
+
+# DMXJ port 2
+[[mapping]]
+from = "artnet:50.1.3"
+to = "sacn:167"
+
+# DMXK port 1: cyc5
+[[mapping]]
+from = "artnet:50.1.4"
+to = "sacn:169"
+
+# DMXK port 2
+[[mapping]]
+from = "artnet:50.1.5"
+to = "sacn:171"
+
+# DMXL port 1: cyc6
+[[mapping]]
+from = "artnet:50.1.6"
+to = "sacn:173"
+
+# DMXL port 2
+[[mapping]]
+from = "artnet:50.1.7"
+to = "sacn:175"
+
+# DMXM port 1: focus1
+[[mapping]]
+from = "artnet:50.1.8"
+to = "sacn:177"
+
+# DMXM port 2: focus2
+[[mapping]]
+from = "artnet:50.1.9"
+to = "sacn:179"
+
+# DMXN port 1: focus3
+[[mapping]]
+from = "artnet:50.1.10"
+to = "sacn:181"
+
+# DMXN port 2: focus4
+[[mapping]]
+from = "artnet:50.1.11"
+to = "sacn:183"
+
+# DMXO port 1: focus5
+[[mapping]]
+from = "artnet:50.1.12"
+to = "sacn:185"
+
+# DMXO port 2: focus6
+[[mapping]]
+from = "artnet:50.1.13"
+to = "sacn:187"
+
+# DMXP port 1: r3x1
+[[mapping]]
+from = "artnet:50.1.14"
+to = "sacn:189"
+
+# DMXP port 2: r3x2
+[[mapping]]
+from = "artnet:50.1.15"
+to = "sacn:191"
+
+# DMXQ port 1: r2x1
+[[mapping]]
+from = "artnet:50.2.0"
+to = "sacn:193"
+
+# DMXQ port 2
+[[mapping]]
+from = "artnet:50.2.1"
+to = "sacn:195"
+
+# DMXR port 1: r2x2
+[[mapping]]
+from = "artnet:50.2.2"
+to = "sacn:197"
+
+# DMXR port 2
+[[mapping]]
+from = "artnet:50.2.3"
+to = "sacn:199"
+
+# DMXS port 1
+[[mapping]]
+from = "artnet:50.2.4"
+to = "sacn:201"
+
+# DMXS port 2
+[[mapping]]
+from = "artnet:50.2.5"
+to = "sacn:203"
+
+
+
+
+###### Lightkey (sacn) -> ENTTEC (sacn) mappings
 
 # 1M1
 [[mapping]]
-from = "sacn:70:361-396"
-to = "artnet:9.0.0"
+from = "sacn:263:361-396"
+to = "sacn:153"
 
 # 1M2
 [[mapping]]
-from = "sacn:70:397-432"
-to = "artnet:10.0.0"
+from = "sacn:263:397-432"
+to = "sacn:157"
 
 # 1M3
 [[mapping]]
-from = "sacn:70:433-468"
-to = "artnet:11.0.0"
+from = "sacn:263:433-468"
+to = "sacn:161"
 
 # 1M4
 [[mapping]]
-from = "sacn:70:469-504"
-to = "artnet:12.0.0"
+from = "sacn:263:469-504"
+to = "sacn:165"
 
 # 1M5
 [[mapping]]
-from = "sacn:71:361-396"
-to = "artnet:13.0.0"
+from = "sacn:264:361-396"
+to = "sacn:169"
 
 # 1M6
 [[mapping]]
-from = "sacn:71:397-432"
-to = "artnet:14.0.0"
+from = "sacn:264:397-432"
+to = "sacn:173"
+
+
+
+
+###### Lightkey (sacn) -> Pixie (sacn) mappings
 
 # 1P1
 [[mapping]]
-from = "sacn:71:1-360"
-to = "artnet:0.0.2:1"
+from = "sacn:264:1-360"
+to = "sacn:65:1"
 
 # 1P2
 [[mapping]]
-from = "sacn:72:1-150"
-to = "artnet:0.0.2:361"
+from = "sacn:265:1-150"
+to = "sacn:65:361"
 [[mapping]]
-from = "sacn:72:151-360"
-to = "artnet:0.0.3:1"
+from = "sacn:265:151-360"
+to = "sacn:66:1"
 
 # 1P3
 [[mapping]]
-from = "sacn:73:1-300"
-to = "artnet:0.0.3:211"
+from = "sacn:266:1-300"
+to = "sacn:66:211"
 [[mapping]]
-from = "sacn:73:301-360"
-to = "artnet:0.0.4:1"
+from = "sacn:266:301-360"
+to = "sacn:67:1"
 
 # 1P4
 [[mapping]]
-from = "sacn:74:1-360"
-to = "artnet:0.0.4:61"
+from = "sacn:267:1-360"
+to = "sacn:67:61"
 
 # 1P5
 [[mapping]]
-from = "sacn:75:1-90"
-to = "artnet:0.0.4:421"
+from = "sacn:268:1-90"
+to = "sacn:67:421"
 [[mapping]]
-from = "sacn:75:91-360"
-to = "artnet:0.0.5:1"
+from = "sacn:268:91-360"
+to = "sacn:68:1"
 
 # 1P6
 [[mapping]]
-from = "sacn:76:1-240"
-to = "artnet:0.0.5:271"
+from = "sacn:269:1-240"
+to = "sacn:68:271"
 [[mapping]]
-from = "sacn:76:241-360"
-to = "artnet:0.0.6:1"
+from = "sacn:269:241-360"
+to = "sacn:69:1"
 
 # 1P7
 [[mapping]]
-from = "sacn:77:1-360"
-to = "artnet:0.0.10:1"
+from = "sacn:270:1-360"
+to = "sacn:73:1"
 
 # 1P8
 [[mapping]]
-from = "sacn:78:1-150"
-to = "artnet:0.0.10:361"
+from = "sacn:271:1-150"
+to = "sacn:73:361"
 [[mapping]]
-from = "sacn:78:151-360"
-to = "artnet:0.0.11:1"
+from = "sacn:271:151-360"
+to = "sacn:74:1"
 
 # 1P9
 [[mapping]]
-from = "sacn:79:1-300"
-to = "artnet:0.0.11:211"
+from = "sacn:272:1-300"
+to = "sacn:74:211"
 [[mapping]]
-from = "sacn:79:301-360"
-to = "artnet:0.0.12:1"
+from = "sacn:272:301-360"
+to = "sacn:75:1"
 
 # 1P10
 [[mapping]]
-from = "sacn:80:1-360"
-to = "artnet:0.0.12:61"
+from = "sacn:273:1-360"
+to = "sacn:75:61"
 
 # 1P11
 [[mapping]]
-from = "sacn:81:1-90"
-to = "artnet:0.0.12:421"
+from = "sacn:274:1-90"
+to = "sacn:75:421"
 [[mapping]]
-from = "sacn:81:91-360"
-to = "artnet:0.0.13:1"
+from = "sacn:274:91-360"
+to = "sacn:76:1"
 
 # 1P12
 [[mapping]]
-from = "sacn:82:1-240"
-to = "artnet:0.0.13:271"
+from = "sacn:275:1-240"
+to = "sacn:76:271"
 [[mapping]]
-from = "sacn:82:241-360"
-to = "artnet:0.0.14:1"
+from = "sacn:275:241-360"
+to = "sacn:77:1"
 
 # 2P1
 [[mapping]]
-from = "sacn:64:361-450"
+from = "sacn:257:361-450"
 to = "sacn:1:1"
 
 # 2P2
 [[mapping]]
-from = "sacn:65:361-450"
-to = "artnet:0.0.0:91"
+from = "sacn:258:361-450"
+to = "scan:1:91"
 
 # 2P3
 [[mapping]]
-from = "sacn:64:181-360"
-to = "artnet:0.0.0:181"
+from = "sacn:257:181-360"
+to = "sacn:1:181"
 
 # 2P4
 [[mapping]]
-from = "sacn:65:1-150"
-to = "artnet:0.0.0:361"
+from = "sacn:258:1-150"
+to = "sacn:1:361"
 [[mapping]]
-from = "sacn:65:151-180"
-to = "artnet:0.0.1:1"
+from = "sacn:258:151-180"
+to = "sacn:2:1"
 
 # 2P5
 [[mapping]]
-from = "sacn:65:181-360"
-to = "artnet:0.0.1:31"
+from = "sacn:258:181-360"
+to = "sacn:2:31"
 
 # 2P6
 [[mapping]]
-from = "sacn:64:1-181"
-to = "artnet:0.0.1:211"
+from = "sacn:257:1-181"
+to = "sacn:2:211"
 
 # 2P7
 [[mapping]]
-from = "sacn:66:361-450"
-to = "artnet:0.0.1:391"
+from = "sacn:259:361-450"
+to = "sacn:2:391"
 
 # 3P1
 [[mapping]]
-from = "sacn:72:361-450"
-to = "artnet:0.0.8:1"
+from = "sacn:265:361-450"
+to = "sacn:9:1"
 
 # 3P2
 [[mapping]]
-from = "sacn:66:1-180"
-to = "artnet:0.0.8:91"
+from = "sacn:259:1-180"
+to = "sacn:9:91"
 
 # 3P3
 [[mapping]]
-from = "sacn:66:181-360"
-to = "artnet:0.0.8:271"
+from = "sacn:259:181-360"
+to = "sacn:9:271"
 
 # 3P4
 [[mapping]]
-from = "sacn:70:1-60"
-to = "artnet:0.0.8:451"
+from = "sacn:263:1-60"
+to = "sacn:9:451"
 [[mapping]]
-from = "sacn:70:61-180"
-to = "artnet:0.0.9:1"
+from = "sacn:263:61-180"
+to = "sacn:10:1"
 
 # 3P5
 [[mapping]]
-from = "sacn:70:181-360"
-to = "artnet:0.0.9:121"
+from = "sacn:263:181-360"
+to = "sacn:10:121"
 
 # 3P6
 [[mapping]]
-from = "sacn:73:361-450"
-to = "artnet:0.0.9:301"
+from = "sacn:266:361-450"
+to = "sacn:10:301"
 
 # 3P6
 [[mapping]]
-from = "sacn:74:361-450"
-to = "artnet:0.0.9:391"
+from = "sacn:267:361-450"
+to = "sacn:10:391"
