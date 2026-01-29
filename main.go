@@ -14,7 +14,7 @@ import (
 	"github.com/gopatchy/artnet"
 	"github.com/gopatchy/artmap/config"
 	"github.com/gopatchy/artmap/remap"
-	"github.com/gopatchy/artmap/sacn"
+	"github.com/gopatchy/sacn"
 )
 
 type App struct {
@@ -162,10 +162,24 @@ func main() {
 	// Create sACN receiver if needed
 	sacnUniverses := cfg.SACNSourceUniverses()
 	if len(sacnUniverses) > 0 {
-		sacnReceiver, err := sacn.NewReceiver(sacnUniverses, *sacnInterface, app.HandleSACN)
+		sacnReceiver, err := sacn.NewReceiver(*sacnInterface)
 		if err != nil {
 			log.Fatalf("sacn receiver error: %v", err)
 		}
+		var iface *net.Interface
+		if *sacnInterface != "" {
+			iface, _ = net.InterfaceByName(*sacnInterface)
+		}
+		for _, u := range sacnUniverses {
+			if err := sacnReceiver.JoinUniverse(iface, u); err != nil {
+				log.Printf("[sacn] failed to join universe %d: %v", u, err)
+			}
+		}
+		sacnReceiver.SetHandler(func(src *net.UDPAddr, pkt interface{}) {
+			if data, ok := pkt.(*sacn.DataPacket); ok {
+				app.HandleSACN(data.Universe, data.Data)
+			}
+		})
 		app.sacnReceiver = sacnReceiver
 		sacnReceiver.Start()
 		log.Printf("[sacn] listening universes=%v", sacnUniverses)
