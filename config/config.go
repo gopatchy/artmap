@@ -271,7 +271,7 @@ func splitProtoPrefix(s string) (Protocol, string, error) {
 	if strings.HasPrefix(s, "sacn:") {
 		return ProtocolSACN, s[5:], nil
 	}
-	return "", "", fmt.Errorf("address must start with 'artnet:' or 'sacn:' prefix")
+	return "", "", fmt.Errorf("address %q must start with 'artnet:' or 'sacn:' prefix", s)
 }
 
 func splitAddr(s string) (universe, channel string) {
