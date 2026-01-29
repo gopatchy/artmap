@@ -8,13 +8,14 @@ import (
 const (
 	Port = 5568
 
-	// ACN packet identifiers
-	ACNPacketIdentifier = 0x41534300 // "ASC\0" + more bytes
+	ACNPacketIdentifier = 0x41534300
 
-	// Vector values
-	VectorRootE131Data    = 0x00000004
-	VectorE131DataPacket  = 0x00000002
-	VectorDMPSetProperty  = 0x02
+	VectorRootE131Data      = 0x00000004
+	VectorRootE131Extended  = 0x00000008
+	VectorE131DataPacket    = 0x00000002
+	VectorE131Discovery     = 0x00000002
+	VectorDMPSetProperty    = 0x02
+	VectorUniverseDiscovery = 0x00000001
 )
 
 var (
@@ -92,11 +93,49 @@ func BuildDataPacket(universe uint16, sequence uint8, sourceName string, cid [16
 	return buf
 }
 
-// MulticastAddr returns the multicast address for a given universe
 func MulticastAddr(universe uint16) *net.UDPAddr {
-	// 239.255.{universe_high}.{universe_low}
 	return &net.UDPAddr{
 		IP:   net.IPv4(239, 255, byte(universe>>8), byte(universe&0xff)),
 		Port: Port,
 	}
+}
+
+var DiscoveryAddr = &net.UDPAddr{
+	IP:   net.IPv4(239, 255, 250, 214),
+	Port: Port,
+}
+
+func BuildDiscoveryPacket(sourceName string, cid [16]byte, page, lastPage uint8, universes []uint16) []byte {
+	universeCount := len(universes)
+	if universeCount > 512 {
+		universeCount = 512
+	}
+
+	pktLen := 120 + universeCount*2
+	buf := make([]byte, pktLen)
+
+	binary.BigEndian.PutUint16(buf[0:2], 0x0010)
+	binary.BigEndian.PutUint16(buf[2:4], 0x0000)
+	copy(buf[4:16], packetIdentifier[:])
+	rootLen := pktLen - 16
+	binary.BigEndian.PutUint16(buf[16:18], 0x7000|uint16(rootLen))
+	binary.BigEndian.PutUint32(buf[18:22], VectorRootE131Extended)
+	copy(buf[22:38], cid[:])
+
+	framingLen := pktLen - 38
+	binary.BigEndian.PutUint16(buf[38:40], 0x7000|uint16(framingLen))
+	binary.BigEndian.PutUint32(buf[40:44], VectorE131Discovery)
+	copy(buf[44:108], sourceName)
+	binary.BigEndian.PutUint32(buf[108:112], 0)
+
+	discoveryLen := pktLen - 112
+	binary.BigEndian.PutUint16(buf[112:114], 0x7000|uint16(discoveryLen))
+	binary.BigEndian.PutUint32(buf[114:118], VectorUniverseDiscovery)
+	buf[118] = page
+	buf[119] = lastPage
+	for i := 0; i < universeCount; i++ {
+		binary.BigEndian.PutUint16(buf[120+i*2:122+i*2], universes[i])
+	}
+
+	return buf
 }

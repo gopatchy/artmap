@@ -107,12 +107,16 @@ func main() {
 	}
 	defer artSender.Close()
 
-	// Create sACN sender
 	sacnSender, err := sacn.NewSender("artmap", *sacnInterface)
 	if err != nil {
 		log.Fatalf("sacn sender error: %v", err)
 	}
 	defer sacnSender.Close()
+
+	for _, u := range engine.DestSACNUniverses() {
+		sacnSender.RegisterUniverse(u)
+	}
+	sacnSender.StartDiscovery()
 
 	// Create discovery
 	destNums := engine.DestArtNetUniverses()

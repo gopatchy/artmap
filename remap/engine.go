@@ -92,11 +92,24 @@ func (e *Engine) SourceArtNetUniverses() []uint16 {
 	return result
 }
 
-// DestArtNetUniverses returns destination ArtNet universe numbers (for discovery)
 func (e *Engine) DestArtNetUniverses() []uint16 {
 	seen := make(map[uint16]bool)
 	for _, m := range e.mappings {
 		if m.To.Protocol == config.ProtocolArtNet {
+			seen[m.To.Number] = true
+		}
+	}
+	result := make([]uint16, 0, len(seen))
+	for u := range seen {
+		result = append(result, u)
+	}
+	return result
+}
+
+func (e *Engine) DestSACNUniverses() []uint16 {
+	seen := make(map[uint16]bool)
+	for _, m := range e.mappings {
+		if m.To.Protocol == config.ProtocolSACN {
 			seen[m.To.Number] = true
 		}
 	}
