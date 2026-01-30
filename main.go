@@ -33,11 +33,13 @@ type App struct {
 	sacnTargets   map[uint16][]*net.UDPAddr
 	debug         bool
 
-	inputMu        sync.Mutex
-	inputBySrc     map[string]uint64
-	inputByUniv    map[string]uint64
-	inputByName    map[string]uint64
-	inputSeqCounts map[string]map[uint8]uint64
+	inputMu         sync.Mutex
+	inputBySrc      map[string]uint64
+	inputByUniv     map[string]uint64
+	inputByName     map[string]uint64
+	inputLastSeq    map[string]uint8
+	inputSeqSame    map[string]uint64
+	inputSeqDiff    map[string]uint64
 }
 
 func main() {
@@ -153,11 +155,13 @@ func main() {
 		engine:       engine,
 		artTargets:   artTargets,
 		sacnTargets:  sacnTargets,
-		debug:          *debug,
-		inputBySrc:     map[string]uint64{},
-		inputByUniv:    map[string]uint64{},
-		inputByName:    map[string]uint64{},
-		inputSeqCounts: map[string]map[uint8]uint64{},
+		debug:        *debug,
+		inputBySrc:   map[string]uint64{},
+		inputByUniv:  map[string]uint64{},
+		inputByName:  map[string]uint64{},
+		inputLastSeq: map[string]uint8{},
+		inputSeqSame: map[string]uint64{},
+		inputSeqDiff: map[string]uint64{},
 	}
 
 	// Create ArtNet receiver if enabled
@@ -287,10 +291,14 @@ func (a *App) HandleSACN(src *net.UDPAddr, pkt *sacn.DataPacket) {
 	a.inputBySrc[src.IP.String()]++
 	a.inputByUniv[univKey]++
 	a.inputByName[pkt.SourceName]++
-	if a.inputSeqCounts[univKey] == nil {
-		a.inputSeqCounts[univKey] = map[uint8]uint64{}
+	if lastSeq, ok := a.inputLastSeq[univKey]; ok {
+		if pkt.Sequence == lastSeq {
+			a.inputSeqSame[univKey]++
+		} else {
+			a.inputSeqDiff[univKey]++
+		}
 	}
-	a.inputSeqCounts[univKey][pkt.Sequence]++
+	a.inputLastSeq[univKey] = pkt.Sequence
 	a.inputMu.Unlock()
 
 	u := config.Universe{Protocol: config.ProtocolSACN, Number: pkt.Universe}
@@ -356,11 +364,13 @@ func (a *App) printStats() {
 	inputBySrc := a.inputBySrc
 	inputByUniv := a.inputByUniv
 	inputByName := a.inputByName
-	inputSeqCounts := a.inputSeqCounts
+	inputSeqSame := a.inputSeqSame
+	inputSeqDiff := a.inputSeqDiff
 	a.inputBySrc = map[string]uint64{}
 	a.inputByUniv = map[string]uint64{}
 	a.inputByName = map[string]uint64{}
-	a.inputSeqCounts = map[string]map[uint8]uint64{}
+	a.inputSeqSame = map[string]uint64{}
+	a.inputSeqDiff = map[string]uint64{}
 	a.inputMu.Unlock()
 
 	if len(inputBySrc) > 0 {
@@ -378,17 +388,10 @@ func (a *App) printStats() {
 	if len(inputByUniv) > 0 {
 		log.Printf("[stats] input by universe (last 10s):")
 		for univ, count := range inputByUniv {
-			log.Printf("[stats]   %s: %d packets", univ, count)
+			same := inputSeqSame[univ]
+			diff := inputSeqDiff[univ]
+			log.Printf("[stats]   %s: %d packets (seq same=%d diff=%d)", univ, count, same, diff)
 		}
-	}
-	for univ, seqs := range inputSeqCounts {
-		var duplicates uint64
-		for _, count := range seqs {
-			if count > 1 {
-				duplicates += count - 1
-			}
-		}
-		log.Printf("[stats] %s: %d unique seqs, %d duplicates", univ, len(seqs), duplicates)
 	}
 
 	if len(a.cfg.Mappings) == 0 {
