@@ -11,7 +11,6 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -32,14 +31,6 @@ type App struct {
 	artTargets   map[uint16]*net.UDPAddr
 	sacnTargets  map[uint16][]*net.UDPAddr
 	debug        bool
-
-	inputMu      sync.Mutex
-	inputBySrc   map[string]uint64
-	inputByUniv  map[string]uint64
-	inputByName  map[string]uint64
-	inputLastSeq map[string]uint8
-	inputSeqSame map[string]uint64
-	inputSeqDiff map[string]uint64
 }
 
 func main() {
@@ -148,20 +139,14 @@ func main() {
 
 	// Create app
 	app := &App{
-		cfg:          cfg,
-		artSender:    artSender,
-		sacnSender:   sacnSender,
-		discovery:    discovery,
-		engine:       engine,
-		artTargets:   artTargets,
-		sacnTargets:  sacnTargets,
-		debug:        *debug,
-		inputBySrc:   map[string]uint64{},
-		inputByUniv:  map[string]uint64{},
-		inputByName:  map[string]uint64{},
-		inputLastSeq: map[string]uint8{},
-		inputSeqSame: map[string]uint64{},
-		inputSeqDiff: map[string]uint64{},
+		cfg:         cfg,
+		artSender:   artSender,
+		sacnSender:  sacnSender,
+		discovery:   discovery,
+		engine:      engine,
+		artTargets:  artTargets,
+		sacnTargets: sacnTargets,
+		debug:       *debug,
 	}
 
 	// Create ArtNet receiver if enabled
@@ -252,11 +237,6 @@ func (a *App) HandleDMX(src *net.UDPAddr, pkt *artnet.DMXPacket) {
 		log.Printf("[<-artnet] src=%s universe=%s seq=%d len=%d",
 			src.IP, pkt.Universe, pkt.Sequence, pkt.Length)
 	}
-	a.inputMu.Lock()
-	a.inputBySrc[src.IP.String()]++
-	a.inputByUniv[fmt.Sprintf("artnet:%d", pkt.Universe)]++
-	a.inputMu.Unlock()
-
 	u := config.Universe{Protocol: config.ProtocolArtNet, Number: uint16(pkt.Universe)}
 	a.sendOutputs(a.engine.Remap(u, pkt.Data))
 }
@@ -282,22 +262,6 @@ func (a *App) HandleSACN(src *net.UDPAddr, pkt *sacn.DataPacket) {
 	if a.debug {
 		log.Printf("[<-sacn] src=%s universe=%d seq=%d", src.IP, pkt.Universe, pkt.Sequence)
 	}
-	univKey := fmt.Sprintf("sacn:%d", pkt.Universe)
-
-	a.inputMu.Lock()
-	a.inputBySrc[src.IP.String()]++
-	a.inputByUniv[univKey]++
-	a.inputByName[pkt.SourceName]++
-	if lastSeq, ok := a.inputLastSeq[univKey]; ok {
-		if pkt.Sequence == lastSeq {
-			a.inputSeqSame[univKey]++
-		} else {
-			a.inputSeqDiff[univKey]++
-		}
-	}
-	a.inputLastSeq[univKey] = pkt.Sequence
-	a.inputMu.Unlock()
-
 	u := config.Universe{Protocol: config.ProtocolSACN, Number: pkt.Universe}
 	a.sendOutputs(a.engine.Remap(u, pkt.Data))
 }
@@ -357,40 +321,6 @@ func (a *App) handleConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) printStats() {
-	a.inputMu.Lock()
-	inputBySrc := a.inputBySrc
-	inputByUniv := a.inputByUniv
-	inputByName := a.inputByName
-	inputSeqSame := a.inputSeqSame
-	inputSeqDiff := a.inputSeqDiff
-	a.inputBySrc = map[string]uint64{}
-	a.inputByUniv = map[string]uint64{}
-	a.inputByName = map[string]uint64{}
-	a.inputSeqSame = map[string]uint64{}
-	a.inputSeqDiff = map[string]uint64{}
-	a.inputMu.Unlock()
-
-	if len(inputBySrc) > 0 {
-		log.Printf("[stats] input by source IP (last 10s):")
-		for src, count := range inputBySrc {
-			log.Printf("[stats]   %s: %d packets", src, count)
-		}
-	}
-	if len(inputByName) > 0 {
-		log.Printf("[stats] input by source name (last 10s):")
-		for name, count := range inputByName {
-			log.Printf("[stats]   %q: %d packets", name, count)
-		}
-	}
-	if len(inputByUniv) > 0 {
-		log.Printf("[stats] input by universe (last 10s):")
-		for univ, count := range inputByUniv {
-			same := inputSeqSame[univ]
-			diff := inputSeqDiff[univ]
-			log.Printf("[stats]   %s: %d packets (seq same=%d diff=%d)", univ, count, same, diff)
-		}
-	}
-
 	if len(a.cfg.Mappings) == 0 {
 		return
 	}
