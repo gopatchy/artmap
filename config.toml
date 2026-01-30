@@ -432,7 +432,7 @@ to = "sacn:1:1"
 # 2P2
 [[mapping]]
 from = "sacn:258:361-450"
-to = "scan:1:91"
+to = "sacn:1:91"
 
 # 2P3
 [[mapping]]
