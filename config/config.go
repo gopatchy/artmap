@@ -18,8 +18,8 @@ const (
 
 // Universe represents a DMX universe with its protocol
 type Universe struct {
-	Protocol Protocol
-	Number   uint16
+	Protocol Protocol `json:"protocol"`
+	Number   uint16   `json:"number"`
 }
 
 func NewUniverse(proto Protocol, num any) (Universe, error) {
@@ -104,27 +104,27 @@ func makeUniverse(proto Protocol, n uint16) (Universe, error) {
 
 // Config represents the application configuration
 type Config struct {
-	Targets  []Target  `toml:"target"`
-	Mappings []Mapping `toml:"mapping"`
+	Targets  []Target  `toml:"target" json:"targets"`
+	Mappings []Mapping `toml:"mapping" json:"mappings"`
 }
 
 // Target represents a target address for an output universe
 type Target struct {
-	Universe Universe `toml:"universe"`
-	Address  string   `toml:"address"`
+	Universe Universe `toml:"universe" json:"universe"`
+	Address  string   `toml:"address" json:"address"`
 }
 
 // Mapping represents a single channel mapping rule
 type Mapping struct {
-	From FromAddr `toml:"from"`
-	To   ToAddr   `toml:"to"`
+	From FromAddr `toml:"from" json:"from"`
+	To   ToAddr   `toml:"to" json:"to"`
 }
 
 // FromAddr represents a source universe address with channel range
 type FromAddr struct {
-	Universe     Universe
-	ChannelStart int // 1-indexed
-	ChannelEnd   int // 1-indexed
+	Universe     Universe `json:"universe"`
+	ChannelStart int      `json:"channel_start"` // 1-indexed
+	ChannelEnd   int      `json:"channel_end"`   // 1-indexed
 }
 
 func (a *FromAddr) UnmarshalTOML(data any) error {
@@ -210,8 +210,8 @@ func (a *FromAddr) Count() int {
 
 // ToAddr represents a destination universe address with starting channel
 type ToAddr struct {
-	Universe     Universe
-	ChannelStart int // 1-indexed
+	Universe     Universe `json:"universe"`
+	ChannelStart int      `json:"channel_start"` // 1-indexed
 }
 
 func (a *ToAddr) UnmarshalTOML(data any) error {

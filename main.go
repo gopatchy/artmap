@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -35,6 +37,7 @@ func main() {
 	artnetListen := flag.String("artnet-listen", ":6454", "artnet listen address (empty to disable)")
 	artnetBroadcast := flag.String("artnet-broadcast", "auto", "artnet broadcast addresses (comma-separated, or 'auto')")
 	sacnInterface := flag.String("sacn-interface", "", "network interface for sACN multicast")
+	apiListen := flag.String("api-listen", ":8080", "HTTP API listen address (empty to disable)")
 	debug := flag.Bool("debug", false, "log incoming/outgoing dmx packets")
 	flag.Parse()
 
@@ -190,6 +193,22 @@ func main() {
 		discovery.Start()
 	}
 
+	// Start HTTP API server
+	if *apiListen != "" {
+		go func() {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/api/config", app.handleConfig)
+			server := &http.Server{
+				Addr:    *apiListen,
+				Handler: mux,
+			}
+			log.Printf("[api] listening addr=%s", *apiListen)
+			if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("[api] server error: %v", err)
+			}
+		}()
+	}
+
 	// Wait for interrupt
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -286,6 +305,12 @@ func (a *App) sendOutputs(outputs []remap.Output) {
 			}
 		}
 	}
+}
+
+func (a *App) handleConfig(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Server", "artmap")
+	json.NewEncoder(w).Encode(a.cfg)
 }
 
 func init() {
