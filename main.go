@@ -18,16 +18,16 @@ import (
 )
 
 type App struct {
-	cfg          *config.Config
-	artReceiver  *artnet.Receiver
-	sacnReceiver *sacn.Receiver
-	artSender    *artnet.Sender
-	sacnSender   *sacn.Sender
-	discovery    *artnet.Discovery
-	engine       *remap.Engine
-	artTargets   map[uint16]*net.UDPAddr
-	sacnTargets  map[uint16][]*net.UDPAddr
-	debug        bool
+	cfg           *config.Config
+	artReceiver   *artnet.Receiver
+	sacnReceivers []*sacn.Receiver
+	artSender     *artnet.Sender
+	sacnSender    *sacn.Sender
+	discovery     *artnet.Discovery
+	engine        *remap.Engine
+	artTargets    map[uint16]*net.UDPAddr
+	sacnTargets   map[uint16][]*net.UDPAddr
+	debug         bool
 }
 
 func main() {
@@ -159,29 +159,27 @@ func main() {
 		log.Printf("[artnet] listening addr=%s", addr)
 	}
 
-	// Create sACN receiver if needed
+	// Create sACN receivers (one per universe)
 	sacnUniverses := cfg.SACNSourceUniverses()
 	if len(sacnUniverses) > 0 {
-		sacnReceiver, err := sacn.NewReceiver(*sacnInterface)
-		if err != nil {
-			log.Fatalf("sacn receiver error: %v", err)
-		}
 		var iface *net.Interface
 		if *sacnInterface != "" {
 			iface, _ = net.InterfaceByName(*sacnInterface)
 		}
 		for _, u := range sacnUniverses {
-			if err := sacnReceiver.JoinUniverse(iface, u); err != nil {
-				log.Printf("[sacn] failed to join universe %d: %v", u, err)
+			receiver, err := sacn.NewUniverseReceiver(iface, u)
+			if err != nil {
+				log.Printf("[sacn] failed to create receiver for universe %d: %v", u, err)
+				continue
 			}
+			receiver.SetHandler(func(src *net.UDPAddr, pkt interface{}) {
+				if data, ok := pkt.(*sacn.DataPacket); ok {
+					app.HandleSACN(data.Universe, data.Data)
+				}
+			})
+			app.sacnReceivers = append(app.sacnReceivers, receiver)
+			receiver.Start()
 		}
-		sacnReceiver.SetHandler(func(src *net.UDPAddr, pkt interface{}) {
-			if data, ok := pkt.(*sacn.DataPacket); ok {
-				app.HandleSACN(data.Universe, data.Data)
-			}
-		})
-		app.sacnReceiver = sacnReceiver
-		sacnReceiver.Start()
 		log.Printf("[sacn] listening universes=%v", sacnUniverses)
 	}
 
@@ -197,8 +195,8 @@ func main() {
 	if app.artReceiver != nil {
 		app.artReceiver.Stop()
 	}
-	if app.sacnReceiver != nil {
-		app.sacnReceiver.Stop()
+	for _, r := range app.sacnReceivers {
+		r.Stop()
 	}
 	discovery.Stop()
 }
