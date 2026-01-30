@@ -2,6 +2,7 @@ package remap
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/gopatchy/artmap/config"
 )
@@ -12,19 +13,30 @@ type Output struct {
 	Data     [512]byte
 }
 
+// sourceEntry holds mappings and stats for a source universe
+type sourceEntry struct {
+	mappings []config.NormalizedMapping
+	counter  atomic.Uint64
+}
+
 // Engine handles DMX channel remapping
 type Engine struct {
 	mappings []config.NormalizedMapping
-	bySource map[config.Universe][]config.NormalizedMapping
+	bySource map[config.Universe]*sourceEntry
 	state    map[config.Universe]*[512]byte
 	stateMu  sync.Mutex
 }
 
 // NewEngine creates a new remapping engine
 func NewEngine(mappings []config.NormalizedMapping) *Engine {
-	bySource := make(map[config.Universe][]config.NormalizedMapping)
+	bySource := map[config.Universe]*sourceEntry{}
 	for _, m := range mappings {
-		bySource[m.From] = append(bySource[m.From], m)
+		entry := bySource[m.From]
+		if entry == nil {
+			entry = &sourceEntry{}
+			bySource[m.From] = entry
+		}
+		entry.mappings = append(entry.mappings, m)
 	}
 
 	state := make(map[config.Universe]*[512]byte)
@@ -43,17 +55,18 @@ func NewEngine(mappings []config.NormalizedMapping) *Engine {
 
 // Remap applies mappings to incoming DMX data and returns outputs
 func (e *Engine) Remap(src config.Universe, srcData [512]byte) []Output {
-	mappings, ok := e.bySource[src]
-	if !ok {
+	entry := e.bySource[src]
+	if entry == nil {
 		return nil
 	}
+	entry.counter.Add(1)
 
 	e.stateMu.Lock()
 	defer e.stateMu.Unlock()
 
 	affected := make(map[config.Universe]bool)
 
-	for _, m := range mappings {
+	for _, m := range entry.mappings {
 		affected[m.To] = true
 		outState := e.state[m.To]
 
@@ -74,6 +87,15 @@ func (e *Engine) Remap(src config.Universe, srcData [512]byte) []Output {
 		})
 	}
 
+	return result
+}
+
+// SwapStats returns packet counts per source universe since last call and resets them
+func (e *Engine) SwapStats() map[config.Universe]uint64 {
+	result := map[config.Universe]uint64{}
+	for u, entry := range e.bySource {
+		result[u] = entry.counter.Swap(0)
+	}
 	return result
 }
 

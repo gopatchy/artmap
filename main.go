@@ -11,7 +11,6 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -32,8 +31,6 @@ type App struct {
 	artTargets    map[uint16]*net.UDPAddr
 	sacnTargets   map[uint16][]*net.UDPAddr
 	debug         bool
-	statsMu       sync.Mutex
-	stats         map[config.Universe]uint64
 }
 
 func main() {
@@ -150,7 +147,6 @@ func main() {
 		artTargets:  artTargets,
 		sacnTargets: sacnTargets,
 		debug:       *debug,
-		stats:       map[config.Universe]uint64{},
 	}
 
 	// Create ArtNet receiver if enabled
@@ -245,9 +241,6 @@ func (a *App) HandleDMX(src *net.UDPAddr, pkt *artnet.DMXPacket) {
 			src.IP, pkt.Universe, pkt.Sequence, pkt.Length)
 	}
 	u := config.Universe{Protocol: config.ProtocolArtNet, Number: uint16(pkt.Universe)}
-	a.statsMu.Lock()
-	a.stats[u]++
-	a.statsMu.Unlock()
 	a.sendOutputs(a.engine.Remap(u, pkt.Data))
 }
 
@@ -273,9 +266,6 @@ func (a *App) HandleSACN(universe uint16, data [512]byte) {
 		log.Printf("[<-sacn] universe=%d", universe)
 	}
 	u := config.Universe{Protocol: config.ProtocolSACN, Number: universe}
-	a.statsMu.Lock()
-	a.stats[u]++
-	a.statsMu.Unlock()
 	a.sendOutputs(a.engine.Remap(u, data))
 }
 
@@ -334,19 +324,13 @@ func (a *App) handleConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) printStats() {
-	a.statsMu.Lock()
-	stats := a.stats
-	a.stats = map[config.Universe]uint64{}
-	a.statsMu.Unlock()
-
-	if len(stats) == 0 && len(a.cfg.Mappings) == 0 {
+	if len(a.cfg.Mappings) == 0 {
 		return
 	}
-
+	counts := a.engine.SwapStats()
 	log.Printf("[stats] mapping traffic (last 10s):")
 	for _, m := range a.cfg.Mappings {
-		count := stats[m.From.Universe]
-		log.Printf("[stats]   %s -> %s: %d packets", m.From, m.To, count)
+		log.Printf("[stats]   %s -> %s: %d packets", m.From, m.To, counts[m.From.Universe])
 	}
 }
 
