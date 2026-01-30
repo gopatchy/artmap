@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -31,6 +32,10 @@ type App struct {
 	artTargets    map[uint16]*net.UDPAddr
 	sacnTargets   map[uint16][]*net.UDPAddr
 	debug         bool
+
+	inputMu       sync.Mutex
+	inputBySrc    map[string]uint64
+	inputByUniv   map[string]uint64
 }
 
 func main() {
@@ -139,14 +144,16 @@ func main() {
 
 	// Create app
 	app := &App{
-		cfg:         cfg,
-		artSender:   artSender,
-		sacnSender:  sacnSender,
-		discovery:   discovery,
-		engine:      engine,
-		artTargets:  artTargets,
-		sacnTargets: sacnTargets,
-		debug:       *debug,
+		cfg:          cfg,
+		artSender:    artSender,
+		sacnSender:   sacnSender,
+		discovery:    discovery,
+		engine:       engine,
+		artTargets:   artTargets,
+		sacnTargets:  sacnTargets,
+		debug:        *debug,
+		inputBySrc:   map[string]uint64{},
+		inputByUniv:  map[string]uint64{},
 	}
 
 	// Create ArtNet receiver if enabled
@@ -180,7 +187,7 @@ func main() {
 			}
 			receiver.SetHandler(func(src *net.UDPAddr, pkt interface{}) {
 				if data, ok := pkt.(*sacn.DataPacket); ok {
-					app.HandleSACN(data.Universe, data.Data)
+					app.HandleSACN(src, data.Universe, data.Data)
 				}
 			})
 			app.sacnReceivers = append(app.sacnReceivers, receiver)
@@ -240,6 +247,11 @@ func (a *App) HandleDMX(src *net.UDPAddr, pkt *artnet.DMXPacket) {
 		log.Printf("[<-artnet] src=%s universe=%s seq=%d len=%d",
 			src.IP, pkt.Universe, pkt.Sequence, pkt.Length)
 	}
+	a.inputMu.Lock()
+	a.inputBySrc[src.IP.String()]++
+	a.inputByUniv[fmt.Sprintf("artnet:%d", pkt.Universe)]++
+	a.inputMu.Unlock()
+
 	u := config.Universe{Protocol: config.ProtocolArtNet, Number: uint16(pkt.Universe)}
 	a.sendOutputs(a.engine.Remap(u, pkt.Data))
 }
@@ -261,10 +273,15 @@ func (a *App) HandlePollReply(src *net.UDPAddr, pkt *artnet.PollReplyPacket) {
 }
 
 // HandleSACN handles incoming sACN DMX data
-func (a *App) HandleSACN(universe uint16, data [512]byte) {
+func (a *App) HandleSACN(src *net.UDPAddr, universe uint16, data [512]byte) {
 	if a.debug {
-		log.Printf("[<-sacn] universe=%d", universe)
+		log.Printf("[<-sacn] src=%s universe=%d", src.IP, universe)
 	}
+	a.inputMu.Lock()
+	a.inputBySrc[src.IP.String()]++
+	a.inputByUniv[fmt.Sprintf("sacn:%d", universe)]++
+	a.inputMu.Unlock()
+
 	u := config.Universe{Protocol: config.ProtocolSACN, Number: universe}
 	a.sendOutputs(a.engine.Remap(u, data))
 }
@@ -324,6 +341,26 @@ func (a *App) handleConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) printStats() {
+	a.inputMu.Lock()
+	inputBySrc := a.inputBySrc
+	inputByUniv := a.inputByUniv
+	a.inputBySrc = map[string]uint64{}
+	a.inputByUniv = map[string]uint64{}
+	a.inputMu.Unlock()
+
+	if len(inputBySrc) > 0 {
+		log.Printf("[stats] input by source (last 10s):")
+		for src, count := range inputBySrc {
+			log.Printf("[stats]   %s: %d packets", src, count)
+		}
+	}
+	if len(inputByUniv) > 0 {
+		log.Printf("[stats] input by universe (last 10s):")
+		for univ, count := range inputByUniv {
+			log.Printf("[stats]   %s: %d packets", univ, count)
+		}
+	}
+
 	if len(a.cfg.Mappings) == 0 {
 		return
 	}
