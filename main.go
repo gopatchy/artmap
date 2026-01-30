@@ -94,12 +94,6 @@ func main() {
 		}
 	}
 
-	// Convert poll targets to slice
-	pollTargetSlice := make([]*net.UDPAddr, 0, len(pollTargets))
-	for _, addr := range pollTargets {
-		pollTargetSlice = append(pollTargetSlice, addr)
-	}
-
 	// Create ArtNet sender
 	artSender, err := artnet.NewSender()
 	if err != nil {
@@ -129,7 +123,15 @@ func main() {
 	for i, n := range srcNums {
 		outputUnivs[i] = artnet.Universe(n)
 	}
-	discovery := artnet.NewDiscovery(artSender, "artmap", "artmap", inputUnivs, outputUnivs, pollTargetSlice)
+
+	// Get local interface info for discovery
+	var localIP, broadcastIP net.IP
+	var localMAC net.HardwareAddr
+	if len(broadcasts) > 0 {
+		broadcastIP = broadcasts[0].IP
+		localIP, localMAC = detectLocalInterface(broadcastIP)
+	}
+	discovery := artnet.NewDiscovery(artSender, localIP, broadcastIP, localMAC, "artmap", "artmap", inputUnivs, outputUnivs)
 
 	// Create app
 	app := &App{
@@ -183,8 +185,10 @@ func main() {
 		log.Printf("[sacn] listening universes=%v", sacnUniverses)
 	}
 
-	// Start discovery
-	discovery.Start()
+	// Start discovery only if we have ArtNet outputs
+	if len(destNums) > 0 || len(artTargets) > 0 {
+		discovery.Start()
+	}
 
 	// Wait for interrupt
 	sigChan := make(chan os.Signal, 1)
@@ -360,6 +364,52 @@ func parseTargetAddr(s string, defaultPort int) (*net.UDPAddr, error) {
 	}
 
 	return &net.UDPAddr{IP: ip, Port: port}, nil
+}
+
+// detectLocalInterface returns local IP and MAC for an interface matching the broadcast address
+func detectLocalInterface(broadcast net.IP) (net.IP, net.HardwareAddr) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, nil
+	}
+
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			ipnet, ok := addr.(*net.IPNet)
+			if !ok {
+				continue
+			}
+
+			ip4 := ipnet.IP.To4()
+			if ip4 == nil {
+				continue
+			}
+
+			mask := ipnet.Mask
+			if len(mask) != 4 {
+				continue
+			}
+
+			bcast := make(net.IP, 4)
+			for i := 0; i < 4; i++ {
+				bcast[i] = ip4[i] | ^mask[i]
+			}
+
+			if bcast.Equal(broadcast) {
+				return ip4, iface.HardwareAddr
+			}
+		}
+	}
+	return nil, nil
 }
 
 // detectBroadcastAddrs returns broadcast addresses for all network interfaces

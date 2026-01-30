@@ -4,7 +4,7 @@ go 1.25.6
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/gopatchy/artnet v0.0.0-20260128203426-0a3e9b1daf66
+	github.com/gopatchy/artnet v0.0.0-20260130164309-5e7400fe514e
 	github.com/gopatchy/sacn v0.0.0-20260130055955-54a46fbfe1f0
 )
 
