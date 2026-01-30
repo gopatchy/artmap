@@ -11,7 +11,9 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/gopatchy/artnet"
 	"github.com/gopatchy/artmap/config"
@@ -30,6 +32,8 @@ type App struct {
 	artTargets    map[uint16]*net.UDPAddr
 	sacnTargets   map[uint16][]*net.UDPAddr
 	debug         bool
+	statsMu       sync.Mutex
+	stats         map[config.Universe]uint64
 }
 
 func main() {
@@ -146,6 +150,7 @@ func main() {
 		artTargets:  artTargets,
 		sacnTargets: sacnTargets,
 		debug:       *debug,
+		stats:       map[config.Universe]uint64{},
 	}
 
 	// Create ArtNet receiver if enabled
@@ -209,6 +214,15 @@ func main() {
 		}()
 	}
 
+	// Start stats printer
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			app.printStats()
+		}
+	}()
+
 	// Wait for interrupt
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -231,6 +245,9 @@ func (a *App) HandleDMX(src *net.UDPAddr, pkt *artnet.DMXPacket) {
 			src.IP, pkt.Universe, pkt.Sequence, pkt.Length)
 	}
 	u := config.Universe{Protocol: config.ProtocolArtNet, Number: uint16(pkt.Universe)}
+	a.statsMu.Lock()
+	a.stats[u]++
+	a.statsMu.Unlock()
 	a.sendOutputs(a.engine.Remap(u, pkt.Data))
 }
 
@@ -256,6 +273,9 @@ func (a *App) HandleSACN(universe uint16, data [512]byte) {
 		log.Printf("[<-sacn] universe=%d", universe)
 	}
 	u := config.Universe{Protocol: config.ProtocolSACN, Number: universe}
+	a.statsMu.Lock()
+	a.stats[u]++
+	a.statsMu.Unlock()
 	a.sendOutputs(a.engine.Remap(u, data))
 }
 
@@ -311,6 +331,23 @@ func (a *App) handleConfig(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Server", "artmap")
 	json.NewEncoder(w).Encode(a.cfg)
+}
+
+func (a *App) printStats() {
+	a.statsMu.Lock()
+	stats := a.stats
+	a.stats = map[config.Universe]uint64{}
+	a.statsMu.Unlock()
+
+	if len(stats) == 0 && len(a.cfg.Mappings) == 0 {
+		return
+	}
+
+	log.Printf("[stats] mapping traffic (last 10s):")
+	for _, m := range a.cfg.Mappings {
+		count := stats[m.From.Universe]
+		log.Printf("[stats]   %s -> %s: %d packets", m.From, m.To, count)
+	}
 }
 
 func init() {
