@@ -17,6 +17,7 @@ import (
 	"github.com/gopatchy/artnet"
 	"github.com/gopatchy/artmap/config"
 	"github.com/gopatchy/artmap/remap"
+	"github.com/gopatchy/artmap/senders"
 	"github.com/gopatchy/sacn"
 )
 
@@ -28,6 +29,7 @@ type App struct {
 	sacnSender   *sacn.Sender
 	discovery    *artnet.Discovery
 	engine       *remap.Engine
+	senders      *senders.UniverseSenders
 	artTargets   map[uint16]*net.UDPAddr
 	sacnTargets  map[uint16][]*net.UDPAddr
 	debug        bool
@@ -144,6 +146,7 @@ func main() {
 		sacnSender:  sacnSender,
 		discovery:   discovery,
 		engine:      engine,
+		senders:     senders.New(),
 		artTargets:  artTargets,
 		sacnTargets: sacnTargets,
 		debug:       *debug,
@@ -216,6 +219,15 @@ func main() {
 		}
 	}()
 
+	// Start sender expiration
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			app.senders.Expire(30 * time.Second)
+		}
+	}()
+
 	// Wait for interrupt
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -238,6 +250,7 @@ func (a *App) HandleDMX(src *net.UDPAddr, pkt *artnet.DMXPacket) {
 			src.IP, pkt.Universe, pkt.Sequence, pkt.Length)
 	}
 	u := config.Universe{Protocol: config.ProtocolArtNet, Number: uint16(pkt.Universe)}
+	a.senders.Record(u, src.IP)
 	a.sendOutputs(a.engine.Remap(u, pkt.Data))
 }
 
@@ -263,6 +276,7 @@ func (a *App) HandleSACN(src *net.UDPAddr, pkt *sacn.DataPacket) {
 		log.Printf("[<-sacn] src=%s universe=%d seq=%d", src.IP, pkt.Universe, pkt.Sequence)
 	}
 	u := config.Universe{Protocol: config.ProtocolSACN, Number: pkt.Universe}
+	a.senders.Record(u, src.IP)
 	a.sendOutputs(a.engine.Remap(u, pkt.Data))
 }
 
@@ -314,10 +328,21 @@ func (a *App) sendOutputs(outputs []remap.Output) {
 	}
 }
 
+type configResponse struct {
+	Targets  []config.Target      `json:"targets"`
+	Mappings []config.Mapping     `json:"mappings"`
+	Senders  []senders.SenderInfo `json:"senders"`
+}
+
 func (a *App) handleConfig(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Server", "artmap")
-	json.NewEncoder(w).Encode(a.cfg)
+	resp := configResponse{
+		Targets:  a.cfg.Targets,
+		Mappings: a.cfg.Mappings,
+		Senders:  a.senders.GetAll(),
+	}
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (a *App) printStats() {
