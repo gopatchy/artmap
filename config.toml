@@ -307,32 +307,32 @@ to = "sacn:203"
 
 # 1M1
 [[mapping]]
-from = "sacn:263:361-396"
+from = "sacn:260:361-396"
 to = "sacn:153"
 
 # 1M2
 [[mapping]]
-from = "sacn:263:397-432"
+from = "sacn:260:397-432"
 to = "sacn:157"
 
 # 1M3
 [[mapping]]
-from = "sacn:263:433-468"
+from = "sacn:260:433-468"
 to = "sacn:161"
 
 # 1M4
 [[mapping]]
-from = "sacn:263:469-504"
+from = "sacn:260:469-504"
 to = "sacn:165"
 
 # 1M5
 [[mapping]]
-from = "sacn:264:361-396"
+from = "sacn:261:361-396"
 to = "sacn:169"
 
 # 1M6
 [[mapping]]
-from = "sacn:264:397-432"
+from = "sacn:261:397-432"
 to = "sacn:173"
 
 
@@ -342,86 +342,86 @@ to = "sacn:173"
 
 # 1P1
 [[mapping]]
-from = "sacn:264:1-360"
+from = "sacn:261:1-360"
 to = "sacn:65:1"
 
 # 1P2
 [[mapping]]
-from = "sacn:265:1-150"
+from = "sacn:262:1-150"
 to = "sacn:65:361"
 [[mapping]]
-from = "sacn:265:151-360"
+from = "sacn:262:151-360"
 to = "sacn:66:1"
 
 # 1P3
 [[mapping]]
-from = "sacn:266:1-300"
+from = "sacn:263:1-300"
 to = "sacn:66:211"
 [[mapping]]
-from = "sacn:266:301-360"
+from = "sacn:263:301-360"
 to = "sacn:67:1"
 
 # 1P4
 [[mapping]]
-from = "sacn:267:1-360"
+from = "sacn:264:1-360"
 to = "sacn:67:61"
 
 # 1P5
 [[mapping]]
-from = "sacn:268:1-90"
+from = "sacn:265:1-90"
 to = "sacn:67:421"
 [[mapping]]
-from = "sacn:268:91-360"
+from = "sacn:265:91-360"
 to = "sacn:68:1"
 
 # 1P6
 [[mapping]]
-from = "sacn:269:1-240"
+from = "sacn:266:1-240"
 to = "sacn:68:271"
 [[mapping]]
-from = "sacn:269:241-360"
+from = "sacn:266:241-360"
 to = "sacn:69:1"
 
 # 1P7
 [[mapping]]
-from = "sacn:270:1-360"
+from = "sacn:267:1-360"
 to = "sacn:73:1"
 
 # 1P8
 [[mapping]]
-from = "sacn:271:1-150"
+from = "sacn:268:1-150"
 to = "sacn:73:361"
 [[mapping]]
-from = "sacn:271:151-360"
+from = "sacn:268:151-360"
 to = "sacn:74:1"
 
 # 1P9
 [[mapping]]
-from = "sacn:272:1-300"
+from = "sacn:269:1-300"
 to = "sacn:74:211"
 [[mapping]]
-from = "sacn:272:301-360"
+from = "sacn:269:301-360"
 to = "sacn:75:1"
 
 # 1P10
 [[mapping]]
-from = "sacn:273:1-360"
+from = "sacn:270:1-360"
 to = "sacn:75:61"
 
 # 1P11
 [[mapping]]
-from = "sacn:274:1-90"
+from = "sacn:271:1-90"
 to = "sacn:75:421"
 [[mapping]]
-from = "sacn:274:91-360"
+from = "sacn:271:91-360"
 to = "sacn:76:1"
 
 # 1P12
 [[mapping]]
-from = "sacn:275:1-240"
+from = "sacn:272:1-240"
 to = "sacn:76:271"
 [[mapping]]
-from = "sacn:275:241-360"
+from = "sacn:272:241-360"
 to = "sacn:77:1"
 
 # 2P1
@@ -464,7 +464,7 @@ to = "sacn:2:391"
 
 # 3P1
 [[mapping]]
-from = "sacn:265:361-450"
+from = "sacn:262:361-450"
 to = "sacn:9:1"
 
 # 3P2
@@ -479,23 +479,23 @@ to = "sacn:9:271"
 
 # 3P4
 [[mapping]]
-from = "sacn:263:1-60"
+from = "sacn:260:1-60"
 to = "sacn:9:451"
 [[mapping]]
-from = "sacn:263:61-180"
+from = "sacn:260:61-180"
 to = "sacn:10:1"
 
 # 3P5
 [[mapping]]
-from = "sacn:263:181-360"
+from = "sacn:260:181-360"
 to = "sacn:10:121"
 
 # 3P6
 [[mapping]]
-from = "sacn:266:361-450"
+from = "sacn:263:361-450"
 to = "sacn:10:301"
 
-# 3P6
+# 3P7
 [[mapping]]
-from = "sacn:267:361-450"
+from = "sacn:264:361-450"
 to = "sacn:10:391"
