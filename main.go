@@ -198,7 +198,7 @@ func main() {
 	if *apiListen != "" {
 		go func() {
 			mux := http.NewServeMux()
-			mux.HandleFunc("/api/config", app.handleConfig)
+			mux.HandleFunc("/artmap/api/status", app.handleStatus)
 			server := &http.Server{
 				Addr:    *apiListen,
 				Handler: mux,
@@ -328,16 +328,16 @@ func (a *App) sendOutputs(outputs []remap.Output) {
 	}
 }
 
-type configResponse struct {
+type statusResponse struct {
 	Targets  []config.Target      `json:"targets"`
 	Mappings []config.Mapping     `json:"mappings"`
 	Senders  []senders.SenderInfo `json:"senders"`
 }
 
-func (a *App) handleConfig(w http.ResponseWriter, r *http.Request) {
+func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Server", "artmap")
-	resp := configResponse{
+	resp := statusResponse{
 		Targets:  a.cfg.Targets,
 		Mappings: a.cfg.Mappings,
 		Senders:  a.senders.GetAll(),
