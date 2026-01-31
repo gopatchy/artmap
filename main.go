@@ -32,6 +32,7 @@ type App struct {
 	senders      *senders.UniverseSenders
 	artTargets   map[uint16]*net.UDPAddr
 	sacnTargets  map[uint16][]*net.UDPAddr
+	senderHz     int
 	debug        bool
 }
 
@@ -41,6 +42,7 @@ func main() {
 	artnetBroadcast := flag.String("artnet-broadcast", "auto", "artnet broadcast addresses (comma-separated, or 'auto')")
 	sacnInterface := flag.String("sacn-interface", "", "network interface for sACN multicast")
 	apiListen := flag.String("api-listen", ":8080", "HTTP API listen address (empty to disable)")
+	senderHz := flag.Int("sender-hz", 40, "fixed sender rate in Hz (0 = send immediately on input)")
 	debug := flag.Bool("debug", false, "log incoming/outgoing dmx packets")
 	flag.Parse()
 
@@ -149,6 +151,7 @@ func main() {
 		senders:     senders.New(),
 		artTargets:  artTargets,
 		sacnTargets: sacnTargets,
+		senderHz:    *senderHz,
 		debug:       *debug,
 	}
 
@@ -228,6 +231,18 @@ func main() {
 		}
 	}()
 
+	// Start fixed-rate sender
+	if *senderHz > 0 {
+		log.Printf("[sender] starting at %dHz", *senderHz)
+		go func() {
+			ticker := time.NewTicker(time.Second / time.Duration(*senderHz))
+			defer ticker.Stop()
+			for range ticker.C {
+				app.sendOutputs(app.engine.GetDirtyOutputs())
+			}
+		}()
+	}
+
 	// Wait for interrupt
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -251,7 +266,10 @@ func (a *App) HandleDMX(src *net.UDPAddr, pkt *artnet.DMXPacket) {
 	}
 	u := config.Universe{Protocol: config.ProtocolArtNet, Number: uint16(pkt.Universe)}
 	a.senders.Record(u, src.IP)
-	a.sendOutputs(a.engine.Remap(u, pkt.Data))
+	a.engine.Remap(u, pkt.Data)
+	if a.senderHz == 0 {
+		a.sendOutputs(a.engine.GetDirtyOutputs())
+	}
 }
 
 // HandlePoll implements artnet.PacketHandler
@@ -277,7 +295,10 @@ func (a *App) HandleSACN(src *net.UDPAddr, pkt *sacn.DataPacket) {
 	}
 	u := config.Universe{Protocol: config.ProtocolSACN, Number: pkt.Universe}
 	a.senders.Record(u, src.IP)
-	a.sendOutputs(a.engine.Remap(u, pkt.Data))
+	a.engine.Remap(u, pkt.Data)
+	if a.senderHz == 0 {
+		a.sendOutputs(a.engine.GetDirtyOutputs())
+	}
 }
 
 func (a *App) sendOutputs(outputs []remap.Output) {

@@ -19,12 +19,18 @@ type sourceEntry struct {
 	counter  atomic.Uint64
 }
 
+// universeBuffer holds per-output-universe state with its own lock
+type universeBuffer struct {
+	mu    sync.Mutex
+	data  [512]byte
+	dirty bool
+}
+
 // Engine handles DMX channel remapping
 type Engine struct {
 	mappings []config.NormalizedMapping
 	bySource map[config.Universe]*sourceEntry
-	state    map[config.Universe]*[512]byte
-	stateMu  sync.Mutex
+	outputs  map[config.Universe]*universeBuffer
 }
 
 // NewEngine creates a new remapping engine
@@ -39,55 +45,68 @@ func NewEngine(mappings []config.NormalizedMapping) *Engine {
 		entry.mappings = append(entry.mappings, m)
 	}
 
-	state := make(map[config.Universe]*[512]byte)
+	outputs := map[config.Universe]*universeBuffer{}
 	for _, m := range mappings {
-		if _, ok := state[m.To]; !ok {
-			state[m.To] = &[512]byte{}
+		if _, ok := outputs[m.To]; !ok {
+			outputs[m.To] = &universeBuffer{}
 		}
 	}
 
 	return &Engine{
 		mappings: mappings,
 		bySource: bySource,
-		state:    state,
+		outputs:  outputs,
 	}
 }
 
-// Remap applies mappings to incoming DMX data and returns outputs
-func (e *Engine) Remap(src config.Universe, srcData [512]byte) []Output {
+// Remap applies mappings to incoming DMX data and marks affected outputs dirty
+func (e *Engine) Remap(src config.Universe, srcData [512]byte) {
 	entry := e.bySource[src]
 	if entry == nil {
-		return nil
+		return
 	}
 	entry.counter.Add(1)
 
-	e.stateMu.Lock()
-	defer e.stateMu.Unlock()
-
-	affected := make(map[config.Universe]bool)
-
 	for _, m := range entry.mappings {
-		affected[m.To] = true
-		outState := e.state[m.To]
+		e.applyMapping(m, srcData)
+	}
+}
 
-		for i := 0; i < m.Count; i++ {
-			srcChan := m.FromChan + i
-			dstChan := m.ToChan + i
-			if srcChan < 512 && dstChan < 512 {
-				outState[dstChan] = srcData[srcChan]
-			}
+func (e *Engine) applyMapping(m config.NormalizedMapping, srcData [512]byte) {
+	buf := e.outputs[m.To]
+	buf.mu.Lock()
+	defer buf.mu.Unlock()
+
+	for i := 0; i < m.Count; i++ {
+		srcChan := m.FromChan + i
+		dstChan := m.ToChan + i
+		if srcChan < 512 && dstChan < 512 {
+			buf.data[dstChan] = srcData[srcChan]
 		}
 	}
+	buf.dirty = true
+}
 
-	result := make([]Output, 0, len(affected))
-	for u := range affected {
-		result = append(result, Output{
-			Universe: u,
-			Data:     *e.state[u],
-		})
+// GetDirtyOutputs returns outputs that have been modified since last call
+func (e *Engine) GetDirtyOutputs() []Output {
+	var result []Output
+	for u, buf := range e.outputs {
+		if out, ok := e.getDirtyOutput(u, buf); ok {
+			result = append(result, out)
+		}
 	}
-
 	return result
+}
+
+func (e *Engine) getDirtyOutput(u config.Universe, buf *universeBuffer) (Output, bool) {
+	buf.mu.Lock()
+	defer buf.mu.Unlock()
+
+	if !buf.dirty {
+		return Output{}, false
+	}
+	buf.dirty = false
+	return Output{Universe: u, Data: buf.data}, true
 }
 
 // SwapStats returns packet counts per source universe since last call and resets them

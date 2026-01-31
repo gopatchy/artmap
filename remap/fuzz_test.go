@@ -45,7 +45,8 @@ func FuzzRemap(f *testing.F) {
 		var srcData [512]byte
 		copy(srcData[:], inputData[:512])
 
-		outputs := engine.Remap(srcU, srcData)
+		engine.Remap(srcU, srcData)
+		outputs := engine.GetDirtyOutputs()
 
 		if len(outputs) != 1 {
 			t.Fatalf("expected 1 output, got %d", len(outputs))
@@ -84,7 +85,8 @@ func FuzzRemapMultipleMappings(f *testing.F) {
 		var srcData [512]byte
 		copy(srcData[:], inputData[:512])
 
-		outputs := engine.Remap(srcU, srcData)
+		engine.Remap(srcU, srcData)
+		outputs := engine.GetDirtyOutputs()
 
 		if len(outputs) != 2 {
 			t.Fatalf("expected 2 outputs, got %d", len(outputs))
@@ -129,9 +131,10 @@ func FuzzRemapUnmatchedUniverse(f *testing.F) {
 		var srcData [512]byte
 		copy(srcData[:], inputData[:512])
 
-		outputs := engine.Remap(otherU, srcData)
-		if outputs != nil {
-			t.Fatalf("expected nil output for unmatched universe, got %d outputs", len(outputs))
+		engine.Remap(otherU, srcData)
+		outputs := engine.GetDirtyOutputs()
+		if len(outputs) != 0 {
+			t.Fatalf("expected 0 outputs for unmatched universe, got %d outputs", len(outputs))
 		}
 	})
 }
